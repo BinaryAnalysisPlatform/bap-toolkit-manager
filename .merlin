@@ -1,0 +1,8 @@
+PKG core_kernel
+PKG fileutils
+PKG ppx_jane
+PKG regular
+PKG bap
+
+S .
+B _build/
