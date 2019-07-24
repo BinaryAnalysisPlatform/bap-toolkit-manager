@@ -1,4 +1,6 @@
 open Core_kernel
+open Monads.Std
+
 
 open Bap_report_types
 
@@ -106,7 +108,7 @@ type incident = {
 }
 
 
-type state = {
+type t = {
   cur   : machine_id;
   machs : machine Machine_id.Map.t;
   hist  : addr list Location_id.Map.t;
@@ -115,112 +117,136 @@ type state = {
   incs  : incident list
 }
 
-let check_of_string name =
-  try
-    let name = String.map ~f:(fun c -> if c = '-' then '_' else c) name in
-    let name = String.capitalize name in
-    Some (check_of_sexp (Sexp.of_string name))
-  with _ -> None
+module State = struct
+  type nonrec t = t
+end
 
-let empty = Map.empty (module String)
+module Make(M : Monad.S) = struct
+  module S = Monad.State.Make(State)(M)
 
-let unresolved = "__primus_linker_unresolved_call"
+  open S.Syntax
 
-let new_machine pid = {pid;stack=[];pc=""; prev_pc=None;}
+  let check_of_string name =
+    try
+      let name = String.map ~f:(fun c -> if c = '-' then '_' else c) name in
+      let name = String.capitalize name in
+      Some (check_of_sexp (Sexp.of_string name))
+    with _ -> None
 
-let stack_top_name = function
-  | [] -> None
-  | (_,name) :: _ -> Some name
+  let unresolved = "__primus_linker_unresolved_call"
 
-let get s = Map.find_exn s.machs s.cur
-let put s m = {s with machs = Map.set s.machs m.pid m; cur = m.pid}
+  let new_machine pid = {pid;stack=[];pc=""; prev_pc=None;}
 
-let on_call state name =
-  let m = get state  in
-  let calls,stack =
-    match m.stack, m.prev_pc with
-    | (pc,_) :: _,_ when pc = m.pc ->
-       (* to prevent adding lisp calls on the stack  *)
-       state.calls, m.stack
-    | stack, Some prev_pc ->
-       let last_few = name :: (List.take stack 5 |> List.map ~f:snd) in
-       Map.set state.calls prev_pc last_few,
-       (m.pc, name) :: stack
-    | _ -> state.calls, m.stack in
-  let cur = {m with stack} in
-  let state = put state cur in
-  {state with calls;}
+  let stack_top_name = function
+    | [] -> None
+    | (_,name) :: _ -> Some name
 
-let on_call_return state name =
-  let m = get state in
-  let stack,calls =
-    match m.stack with
-    | (pc,name') :: stack' when name = name' ->
-       let calls =
-         if m.pc = pc then
-           (* for lisp calls, want be sure it is in calls:
+
+  let machine = S.gets (fun s -> Map.find_exn s.machs s.cur)
+
+  let update_machine m =
+    S.update (fun s ->
+        {s with machs = Map.set s.machs m.pid m; cur = m.pid})
+
+  let call name =
+    S.get () >>= fun state ->
+    machine >>= fun m ->
+    let calls,stack =
+      match m.stack, m.prev_pc with
+      | (pc,_) :: _,_ when pc = m.pc ->
+         (* to prevent adding lisp calls on the stack  *)
+         state.calls, m.stack
+      | stack, Some prev_pc ->
+         let last_few = name :: (List.take stack 5 |> List.map ~f:snd) in
+         Map.set state.calls prev_pc last_few,
+         (m.pc, name) :: stack
+      | _ -> state.calls, m.stack in
+    update_machine {m with stack} >>= fun () ->
+    S.update (fun s -> {s with calls})
+
+  let call_return name =
+    S.get () >>= fun s ->
+    machine >>= fun m ->
+    let stack,calls =
+      match m.stack with
+      | (pc,name') :: stack' when name = name' ->
+         let calls =
+           if m.pc = pc then
+             (* for lisp calls, want be sure it is in calls:
                  i.e. there aren't pc-change event between
                  call  and call-return, therefore the
                  correct address of the can be infered like that *)
-           let last_few = name :: (List.take stack' 5 |> List.map ~f:snd) in
-           Map.set state.calls pc last_few
-         else state.calls in
-       stack', calls
-    | _ -> m.stack, state.calls in
-  let cur = {m with stack;} in
-  let state = put state cur in
-  {state with calls}
+             let last_few = name :: (List.take stack' 5 |> List.map ~f:snd) in
+             Map.set s.calls pc last_few
+           else s.calls in
+         stack', calls
+      | _ -> m.stack, s.calls in
+    update_machine {m with stack} >>= fun () ->
+    S.update (fun s -> {s with calls})
 
-let on_incident s name locs =
-  let location_addr hist id = Option.(Map.find hist id >>= List.hd) in
-  match check_of_string name with
-  | None -> s
-  | Some check ->
-     let m = get s in
-     let locs = List.filter_map locs ~f:(location_addr s.hist) in
-     let last_calls = List.take m.stack 5 |> List.map ~f:snd in
-     {s with incs={check; locs; last_calls;mach=m.pid} :: s.incs}
+  let incident name locs =
+    let location_addr hist id = Option.(Map.find hist id >>= List.hd) in
+    match check_of_string name with
+    | None -> !! ()
+    | Some check ->
+       S.get () >>= fun s ->
+       machine >>= fun m ->
+       let locs = List.filter_map locs ~f:(location_addr s.hist) in
+       let last_calls = List.take m.stack 5 |> List.map ~f:snd in
+       S.update (fun s ->
+           {s with incs={check; locs; last_calls;mach=m.pid} :: s.incs})
 
-let on_switch s (_, id) =
-  let mach = match Map.find s.machs id with
-    | None -> new_machine id
-    | Some m -> m in
-  put s mach
+  let incident_location (id,addrs) =
+    S.update (fun s -> {s with hist = Map.set s.hist id addrs})
 
-let on_fork s (from, to_) =
-  let mach =
-    match Map.find s.machs from with
-    | None -> new_machine to_
-    | Some m -> {m with pid=to_} in
-  put s mach
+  let switch (_, id) =
+    S.get () >>= fun s ->
+    let mach = match Map.find s.machs id with
+      | None -> new_machine id
+      | Some m -> m in
+    update_machine mach
 
-let on_pc_change s addr =
-  let m = get s in
-  let m = {m with pc = addr; prev_pc=Some m.pc} in
-  put s m
+  let fork (from, to_) =
+    S.get () >>= fun s ->
+    let mach =
+      match Map.find s.machs from with
+      | None -> new_machine to_
+      | Some m -> {m with pid=to_} in
+    update_machine mach
 
-let parse file =
-  let ch = In_channel.create file in
-  let rec loop s =
-    match Parse.read ch with
-    | None -> s
-    | Some ev -> match ev with
-      | Switch (a,b) -> loop (on_switch s (a,b))
-      | Fork   (a,b) -> loop (on_fork s (a,b))
-      | Call name | Call_return name when name = unresolved -> loop s
-      | Call name -> loop (on_call s name)
-      | Call_return name -> loop (on_call_return s name)
-      | Incident_location (id,addrs) -> loop {s with hist = Map.set s.hist id addrs}
-      | Pc_changed addr -> loop (on_pc_change s addr)
-      | Symbol (name,addr) -> loop {s with syms = Map.set s.syms addr name}
-      | Incident (name, locs) -> loop (on_incident s name locs) in
-  let r = loop {cur = ""; hist=empty;
-                calls=empty;syms=empty;
-                machs=empty;incs=[]} in
-  In_channel.close ch;
-  r
+  let pc_change addr =
+    machine >>= fun m ->
+    update_machine {m with pc = addr; prev_pc=Some m.pc}
 
-let make_data state =
+  let symbol (name,addr) =
+    S.update (fun s -> {s with syms = Map.set s.syms addr name})
+
+  let event = function
+    | Switch (a,b) -> switch (a,b)
+    | Fork   (a,b) -> fork (a,b)
+    | Call name | Call_return name when name = unresolved -> !! ()
+    | Call name -> call name
+    | Call_return name -> call_return name
+    | Incident_location (id,addrs) -> incident_location (id,addrs)
+    | Pc_changed addr -> pc_change addr
+    | Symbol (name,addr) -> symbol (name,addr)
+    | Incident (name, locs) -> incident name locs
+
+
+  let run file =
+    let ch = In_channel.create file in
+    let rec loop () =
+      match Parse.read ch with
+      | None -> !! ()
+      | Some ev -> event ev >>= loop in
+    loop () >>= fun () ->
+    In_channel.close ch;
+    !! ()
+end
+
+module Main = Make(Monad.Ident)
+
+let reformat state =
   let update checks check data =
     Map.add_multi checks check data in
   let with_symbol inc acc =
@@ -269,6 +295,10 @@ let form_data (check, data) =
   check,stat,List.map data ~f:(fun x -> x, Undecided)
 
 let run file =
-  let state = parse file in
-  let data = make_data state  in
+  let empty = Map.empty (module String) in
+  let fresh = {cur = ""; hist=empty;
+               calls=empty;syms=empty;
+               machs=empty;incs=[]} in
+  let state = Monad.State.exec (Main.run file) fresh in
+  let data = reformat state  in
   List.map (Map.to_alist data) ~f:form_data
