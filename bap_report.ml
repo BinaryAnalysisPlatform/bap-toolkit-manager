@@ -15,21 +15,19 @@ let file_exists file =
 
 let parse_incidents arti file =
   let open Bap_report_parse_incidents in
-  let data = run file in
+  let data = run ~name:(Artifact.name arti) file in
   List.fold data ~init:arti ~f:(fun a (check,stat,data) ->
       match data with
       | [] -> a
       | data -> Artifact.add_check a check stat data)
 
-let () =
+let a () =
   let files = FileUtil.ls "." in
   let tests, artis =
     List.fold files ~init:([],[]) ~f:(fun (tests,artis) dir ->
         let r = dir / "incidents" in
         if file_exists r then
           let name = Filename.basename dir in
-          if name <> "juliet-cwe-252" then tests,artis
-          else
           let size = "no matter" in
           let arti = Artifact.create ~name ~size in
           let arti = parse_incidents arti r in
@@ -41,3 +39,5 @@ let () =
   let doc = Template.render all in
   Out_channel.with_file "results.html"
     ~f:(fun ch -> Out_channel.output_string ch doc)
+
+let () = Bap_report_parse_incidents.parse_confirmations "confirmations"

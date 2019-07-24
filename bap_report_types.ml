@@ -33,8 +33,15 @@ type entry  = string list * status
 type result = entry list
 
 module Check = struct
-  type t = check [@@deriving bin_io, compare, sexp]
-  include Comparator.Make(struct
-      type t = check [@@deriving bin_io, compare, sexp]
+  module Cmp = struct
+    type nonrec t = check [@@deriving bin_io, compare, sexp]
+    include Comparator.Make(struct
+      type nonrec t = t [@@deriving bin_io, compare, sexp]
     end)
+  end
+  include Cmp
+
+  module Map = Map.Make(Cmp)
+  module Set = Set.Make(Cmp)
+
 end

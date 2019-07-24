@@ -4,5 +4,9 @@ PKG ppx_jane
 PKG regular
 PKG bap
 
+
+PKG dockerfile-cmd
+PKG bos
+
 S .
 B _build/

@@ -326,8 +326,7 @@ let lines_number max data =
     | n when n < 10 -> 1
     | n when n < 30 -> 2
     | n when n < 60 -> 3
-    | n when n > 200 -> 4
-    | _  -> max in
+    | _ -> 4 in
   let rows = len / cols  in
   if len - rows * cols = 1 then len / (cols + 1)
   else rows

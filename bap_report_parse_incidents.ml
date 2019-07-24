@@ -1,7 +1,6 @@
 open Core_kernel
 open Monads.Std
 
-
 open Bap_report_types
 
 type location_id = string
@@ -21,6 +20,14 @@ type event =
   | Call_return of string
   | Symbol of string * addr
   | Pc_changed of addr
+
+
+let some = Option.some
+
+let read_sexp ch =
+  try
+    Sexp.input_sexp ch |> some
+  with _ -> None
 
 module Parse = struct
 
@@ -52,8 +59,6 @@ module Parse = struct
         | Atom s -> Some s
         | _ -> None)
 
-  let some = Option.some
-
   let of_sexp s = match s with
     | List (Atom "incident-location" :: List [Atom loc_id; List points] :: _)  ->
       Incident_location (loc_id, trace_of_sexps points) |> some
@@ -79,10 +84,6 @@ module Parse = struct
     with _ -> None
 
   let rec read ch =
-    let read_sexp ch =
-      try
-        Sexp.input_sexp ch |> some
-      with _ -> None in
     match read_sexp ch with
     | None -> None
     | Some s ->
@@ -102,14 +103,14 @@ type machine = {
 
 type incident = {
   check : check;
-  mach : string;
+  mach  : string option;
   locs  : addr list;
-  last_calls : string list;
+  trace : string list;
 }
 
 
 type t = {
-  cur   : machine_id;
+  cur   : machine_id option;
   machs : machine Machine_id.Map.t;
   hist  : addr list Location_id.Map.t;
   syms  : addr String.Map.t;
@@ -117,12 +118,12 @@ type t = {
   incs  : incident list
 }
 
-module State = struct
-  type nonrec t = t
-end
-
 module Make(M : Monad.S) = struct
-  module S = Monad.State.Make(State)(M)
+  module S =
+    Monad.State.Make(struct
+        type nonrec t = t
+        end)(M)
+
 
   open S.Syntax
 
@@ -141,16 +142,28 @@ module Make(M : Monad.S) = struct
     | [] -> None
     | (_,name) :: _ -> Some name
 
-
-  let machine = S.gets (fun s -> Map.find_exn s.machs s.cur)
+  let machine =
+    S.gets (fun s ->
+        match s.cur with
+        | None -> None
+        | Some id -> Map.find s.machs id)
 
   let update_machine m =
     S.update (fun s ->
-        {s with machs = Map.set s.machs m.pid m; cur = m.pid})
+        {s with machs = Map.set s.machs m.pid m; cur = Some m.pid})
+
+
+  let opt x f =
+    x >>= fun x ->
+    match x with
+    | None -> !! ()
+    | Some x -> f x
+
+  let (>>~) = opt
 
   let call name =
     S.get () >>= fun state ->
-    machine >>= fun m ->
+    machine >>~ fun m ->
     let calls,stack =
       match m.stack, m.prev_pc with
       | (pc,_) :: _,_ when pc = m.pc ->
@@ -166,7 +179,7 @@ module Make(M : Monad.S) = struct
 
   let call_return name =
     S.get () >>= fun s ->
-    machine >>= fun m ->
+    machine >>~ fun m ->
     let stack,calls =
       match m.stack with
       | (pc,name') :: stack' when name = name' ->
@@ -191,10 +204,14 @@ module Make(M : Monad.S) = struct
     | Some check ->
        S.get () >>= fun s ->
        machine >>= fun m ->
+       let trace,mach = match m with
+         | None -> [],None
+         | Some m ->
+            List.take m.stack 5 |> List.map ~f:snd,
+            Some m.pid in
        let locs = List.filter_map locs ~f:(location_addr s.hist) in
-       let last_calls = List.take m.stack 5 |> List.map ~f:snd in
        S.update (fun s ->
-           {s with incs={check; locs; last_calls;mach=m.pid} :: s.incs})
+           {s with incs={check; locs; trace; mach} :: s.incs})
 
   let incident_location (id,addrs) =
     S.update (fun s -> {s with hist = Map.set s.hist id addrs})
@@ -215,7 +232,7 @@ module Make(M : Monad.S) = struct
     update_machine mach
 
   let pc_change addr =
-    machine >>= fun m ->
+    machine >>~ fun m ->
     update_machine {m with pc = addr; prev_pc=Some m.pc}
 
   let symbol (name,addr) =
@@ -232,7 +249,6 @@ module Make(M : Monad.S) = struct
     | Symbol (name,addr) -> symbol (name,addr)
     | Incident (name, locs) -> incident name locs
 
-
   let run file =
     let ch = In_channel.create file in
     let rec loop () =
@@ -246,46 +262,70 @@ end
 
 module Main = Make(Monad.Ident)
 
-let reformat state =
-  let update checks check data =
-    Map.add_multi checks check data in
-  let with_symbol inc acc =
+
+module Data_format = struct
+
+  let symbol_name s inc =
     match inc.locs with
-    | [] -> acc
+    | [] -> None
     | a :: _ ->
-      let r = match Map.find state.syms a with
-        | Some name -> [name]
-        | _ ->  [a] in
-      update acc inc.check r in
-  let with_symbol_call inc acc =
+       match Map.find s.syms a with
+       | Some name -> Some [name]
+       | _ ->  Some [a]
+
+  let null_deref s inc =
     match inc.locs with
-    | [] -> acc
+    | event :: _ ->
+       let last = Option.value ~default:"" (List.hd inc.trace) in
+       Some [last;event]
+    | _ -> None
+
+  let unused_return s inc =
+    match inc.locs with
+    | [] -> None
     | a :: _ ->
-      match Map.find state.calls a with
+      match Map.find s.calls a with
       | Some (name :: prev :: _ )->
-         update acc inc.check [prev; name; a]
+         Some  [prev; name; a]
       | Some (name :: [])->
-         update acc inc.check ["-----"; name; a]
-      | _ -> acc in
-  let null_ptr_deref inc acc =
+         Some ["-----"; name; a]
+      | _ -> None
+
+  let use_after_free s inc =
     match inc.locs with
-    | event::_ ->
-      let last = Option.value ~default:"" (List.hd inc.last_calls) in
-      update acc inc.check [last;event]
-    | _ -> acc in
-  let with_three_addresses inc acc =
-    match inc.locs with
-    | use :: free :: alloc :: _ -> update acc inc.check [use; free; alloc]
-    | _ -> acc in
+    | use :: free :: alloc :: _ -> Some [use; free; alloc]
+    | _ -> None
+
+end
+
+let rec compare_strings xs ys =
+  match xs, ys with
+  | [],[] -> 0
+  | x :: xs, y :: ys ->
+     let r = String.compare x y in
+     if r = 0 then compare xs ys
+     else r
+  | [], _ -> 1
+  | _, [] -> -1
+
+let reformat state =
+  let dedup = List.dedup_and_sort ~compare:compare_strings in
+  let unique s = Map.map s ~f:dedup in
+  let update s inc f =
+    match f state inc with
+    | None -> s
+    | Some data -> Map.add_multi s inc.check data in
   List.fold state.incs ~init:(Map.empty (module Check))
     ~f:(fun acc inc ->
+      let f =
         match inc.check with
         | Forbidden_function | Complex_function
-        | Non_structural_cfg | Recursive_function -> with_symbol inc acc
-        | Unused_return_value -> with_symbol_call inc acc
-        | Null_ptr_deref -> null_ptr_deref inc acc
-        | Memcheck_use_after_release -> with_three_addresses inc acc
-        | _ -> acc)
+        | Non_structural_cfg | Recursive_function -> Data_format.symbol_name
+        | Unused_return_value -> Data_format.unused_return
+        | Null_ptr_deref -> Data_format.null_deref
+        | Memcheck_use_after_release -> Data_format.use_after_free
+        | _ -> (fun s _ -> None) in
+      update acc inc f) |> unique
 
 let form_data (check, data) =
   let total = List.length data in
@@ -294,11 +334,121 @@ let form_data (check, data) =
      took_time="-"} in
   check,stat,List.map data ~f:(fun x -> x, Undecided)
 
-let run file =
+let dump name data outfile =
+  let result_to_sexp check data =
+    Sexp.List [
+        sexp_of_status Undecided;
+        Sexp.List
+         (sexp_of_check check ::
+            List.map ~f:(fun x -> Sexp.Atom x) data)] in
+  let data' =
+    List.fold ~init:[] data ~f:(fun acc (check, results) ->
+        List.fold results ~init:acc ~f:(fun acc r ->
+            result_to_sexp check r :: acc)) in
+  let s = Sexp.List (Sexp.Atom name :: data') in
+  Out_channel.with_file outfile
+    ~append:true
+    ~f:(fun out ->
+      let fmt = Format.formatter_of_out_channel out in
+      Format.fprintf fmt "%a%!" Sexp.pp_hum s)
+
+let run ~name file =
   let empty = Map.empty (module String) in
-  let fresh = {cur = ""; hist=empty;
+  let fresh = {cur = None; hist=empty;
                calls=empty;syms=empty;
                machs=empty;incs=[]} in
   let state = Monad.State.exec (Main.run file) fresh in
-  let data = reformat state  in
-  List.map (Map.to_alist data) ~f:form_data
+  let data = reformat state  |> Map.to_alist in
+  List.map data ~f:form_data
+
+let process  ?(output="summary") ~name file =
+  let empty = Map.empty (module String) in
+  let fresh = {cur = None; hist=empty;
+               calls=empty;syms=empty;
+               machs=empty;incs=[]} in
+  let state = Monad.State.exec (Main.run file) fresh in
+  let data = reformat state  |> Map.to_alist in
+  dump name data output
+
+module Result = struct
+  type t = string list [@@deriving bin_io, sexp]
+  let compare = compare_strings
+  include Comparator.Make(struct
+      type nonrec t = t [@@deriving bin_io,compare,sexp]
+      let comapre = compare_strings
+ end)
+end
+
+module Results = Map.Make(Result)
+
+type full = {
+    name  : string;
+    checks : status Results.t Check.Map.t
+  }
+
+let merge x y =
+  {x with
+    checks =
+      Map.fold x.checks ~init:x.checks
+        ~f:(fun ~key:check ~data:results rs ->
+          match Map.find y.checks check with
+          | None -> rs
+          | Some results' ->
+             let results =
+               Map.fold results' ~init:results
+                 ~f:(fun ~key:result' ~data:status' results ->
+                   match Map.find results result' with
+                   | None when status' = False_neg ->
+                      Map.set results result' status'
+                   | Some Undecided ->
+                      Map.set results result' status'
+                   | _ -> results) in
+             Map.set rs check results)
+  }
+
+let merge results confirmations =
+  List.fold results ~init:[] ~f:(fun acc r ->
+      match List.find confirmations ~f:(fun x -> x.name = r.name) with
+      | None -> r :: acc
+      | Some r' -> merge r r' :: acc)
+
+let read_artifact_results data =
+  let update acc status check incident_data =
+    try
+      let status = status_of_sexp status in
+      let check  = check_of_sexp check in
+      let data   = List.map incident_data ~f:Sexp.to_string in
+      Map.update acc check ~f:(function
+          | None -> Map.set (Map.empty (module Result)) data status
+          | Some r -> Map.set r data status)
+    with _ -> acc in
+  let rec read acc = function
+    | [] -> acc
+    | x :: xs ->
+       match x with
+       | Sexp.List (status :: Sexp.List (check :: incident_data) :: _) ->
+          read (update acc status check incident_data) xs
+       | _ -> read acc xs in
+  read (Map.empty (module Check)) data
+
+let rec read_confirmations acc ch =
+  let open Sexp in
+  match read_sexp ch with
+  | None -> acc
+  | Some s ->
+     match s with
+     | List (Atom arti :: [] ) ->
+        read_confirmations acc ch
+     | List (Atom arti :: data) ->
+        let _ = read_artifact_results data in
+        read_confirmations acc ch
+     | _ -> read_confirmations acc ch
+
+let parse_confirmations file =
+  In_channel.with_file file ~f:(fun ch ->
+      ignore @@ read_confirmations [] ch
+    )
+
+let parse_confirmations file =
+  if not (Sys.file_exists file) then ()
+  else parse_confirmations file
