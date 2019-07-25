@@ -2,30 +2,6 @@ open Core_kernel
 
 open Bap_report_types
 
-type artifact = {
-    name : string;
-    size : string;
-    data : (check * stat * result) list
-  }
-
-module Artifact = struct
-
-  type t = artifact
-
-  let create ~name ~size = {
-      name; size; data = []
-    }
-
-  let add_check t check stat result =
-    {t with data = (check,stat,result) :: t.data}
-
-  let checks t = List.rev t.data
-  let name t = t.name
-  let size t = t.size
-end
-
-
-
 module Style = struct
 
   type align =
@@ -127,6 +103,10 @@ module Tab = struct
   let init_from_rows ?style () = {col = 0; doc = []; style}
 
   let with_headers ?style hdrs =
+    let align = Style.(align Center) in
+    let style = match style with
+      | None -> Some align
+      | Some s -> Some (Style.merge s align) in
     let col = List.length hdrs in
     let doc = List.rev_map hdrs ~f:(Entry.create ~tag:"th") in
     {doc;col;style;}
@@ -144,8 +124,8 @@ module Tab = struct
   let is_aligned e =
     List.exists (Entry.style e)
       ~f:(function
-        | Style.Align _ -> true
-        | _ -> false)
+          | Style.Align _ -> true
+          | _ -> false)
 
   let default_cell_align cols col =
     if col = cols - 1 then Style.(align Right)
@@ -343,19 +323,19 @@ let render_data ?(max_cols=6) data =
   match data with
   | [] -> ""
   | ((fst,_) :: _) as data  ->
-     if not (is_tableable data) then render_as_text data
-     else
-       let cols = List.length fst in
-       let data = List.sort data ~compare:compare_strings in
-       let empty () = Tab.create ~style:(Style.custom "id=\"data\"") cols in
-       let rows = lines_number max_cols data in
-       let tabs, last, _ =
-         List.fold data ~init:([],empty (),0) ~f:(fun (acc,tab,i) ws ->
-             let tab = add_row ws tab in
-             if i + 1 < rows then acc, tab, i + 1
-             else tab :: acc, empty (), 0) in
-       let tabs = List.rev_map (last :: tabs) ~f:Tab.get in
-       lineup_elements tabs
+    if not (is_tableable data) then render_as_text data
+    else
+      let cols = List.length fst in
+      let data = List.sort data ~compare:compare_strings in
+      let empty () = Tab.create ~style:(Style.custom "id=\"data\"") cols in
+      let rows = lines_number max_cols data in
+      let tabs, last, _ =
+        List.fold data ~init:([],empty (),0) ~f:(fun (acc,tab,i) ws ->
+            let tab = add_row ws tab in
+            if i + 1 < rows then acc, tab, i + 1
+            else tab :: acc, empty (), 0) in
+      let tabs = List.rev_map (last :: tabs) ~f:Tab.get in
+      lineup_elements tabs
 
 
 let render_checkname arti check =
@@ -377,12 +357,14 @@ let render_stat = function
 let render_time = function
   | None -> ""
   | Some s ->
-    sprintf "<pre>Time: %s</pre>" s.took_time
+    sprintf "<pre>Time: %s</pre>" s
 
-let render_check ~artifact check ?stat data =
+let render_check artifact check ?stat data =
+  let name = Artifact.name artifact in
+  let time = Artifact.time_hum artifact check in
   String.concat [
-    render_checkname artifact check;
-    render_time stat;
+    render_checkname name check;
+    render_time time;
     render_stat stat;
     render_data data;
     "</br>";
@@ -390,10 +372,14 @@ let render_check ~artifact check ?stat data =
 
 let ref_to_top = {|<p><a href="#top">Top</a></p>|}
 
-let render_artifact tab arti =
-  let name = Artifact.name arti in
-  let size = Artifact.size arti in
-  let checks = Artifact.checks arti in
+
+let arti_size arti =
+  Option.value ~default:"unknown" (Artifact.size_hum arti)
+
+let render_artifact tab artifact =
+  let name = Artifact.name artifact in
+  let size = arti_size artifact in
+  let checks = Artifact.checks artifact in
   let arti =
     sprintf "<pre><h3>%s</h3>size: %s</pre>" name size in
   let tab = Tab.add_cell arti tab in
@@ -406,8 +392,9 @@ let render_artifact tab arti =
   let cell = match checks with
     | [] -> ["no incidents found"]
     | checks ->
-       List.fold checks ~init:cell ~f:(fun cell (check, stat, data) ->
-           render_check ~artifact:name check ~stat data :: cell) in
+      List.fold checks ~init:cell ~f:(fun cell (check, data) ->
+          let stat = Artifact.summary artifact check in
+          render_check artifact check ~stat data :: cell) in
   let cell = String.concat (List.rev cell) in
   Tab.add_cell ~style:Style.(align Left) cell tab
 
@@ -434,24 +421,27 @@ let render_summary artifacts =
         let name = Artifact.name arti in
         let info =
           sprintf "<pre><a href=\"#%s\">%s</a>\nsize: %s</pre>"
-            name name (Artifact.size arti) in
+            name name (arti_size arti) in
         let tab = Tab.add_cell ~style info tab in
         match checks with
         | [] ->
-           let xs = List.init 7 (fun _ -> "-") in
-           List.fold xs ~init:tab ~f:(fun tab x ->
-               Tab.add_cell ~style:cell_style x tab)
+          let xs = List.init 7 (fun _ -> "-") in
+          List.fold xs ~init:tab ~f:(fun tab x ->
+              Tab.add_cell ~style:cell_style x tab)
         | checks ->
-        List.fold checks ~init:tab
-          ~f:(fun tab (check, res,_) ->
-              Tab.add_cell ~href:(description_of_check check)
-                (string_of_check check) tab |>
-              Tab.add_cell ~style:cell_style (digit (total_of_stat res)) |>
-              Tab.add_cell ~style:cell_style (digit res.confirmed) |>
-              Tab.add_cell ~style:cell_style (digit res.false_pos) |>
-              Tab.add_cell ~style:cell_style (digit res.false_neg) |>
-              Tab.add_cell ~style:cell_style (digit res.undecided) |>
-              Tab.add_cell ~style:cell_style res.took_time)) in
+          List.fold checks ~init:tab
+            ~f:(fun tab (check, _) ->
+                let res = Artifact.summary arti check in
+                let time = Artifact.time_hum arti check in
+                let time = Option.value ~default:"-" time in
+                Tab.add_cell ~href:(description_of_check check)
+                  (string_of_check check) tab |>
+                Tab.add_cell ~style:cell_style (digit (total_of_stat res)) |>
+                Tab.add_cell ~style:cell_style (digit res.confirmed) |>
+                Tab.add_cell ~style:cell_style (digit res.false_pos) |>
+                Tab.add_cell ~style:cell_style (digit res.false_neg) |>
+                Tab.add_cell ~style:cell_style (digit res.undecided) |>
+                Tab.add_cell ~style:cell_style time)) in
   String.concat [Tab.get tab; "</br>"]
 
 

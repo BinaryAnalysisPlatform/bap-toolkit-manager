@@ -308,15 +308,13 @@ let rec compare_strings xs ys =
   | [], _ -> 1
   | _, [] -> -1
 
-let reformat state =
-  let dedup = List.dedup_and_sort ~compare:compare_strings in
-  let unique s = Map.map s ~f:dedup in
-  let update s inc f =
-    match f state inc with
-    | None -> s
-    | Some data -> Map.add_multi s inc.check data in
-  List.fold state.incs ~init:(Map.empty (module Check))
-    ~f:(fun acc inc ->
+let update arti results =
+  let update arti inc f =
+    match f results inc with
+    | None -> arti
+    | Some data -> Artifact.update arti inc.check data Undecided in
+  List.fold results.incs ~init:arti
+    ~f:(fun arti inc ->
       let f =
         match inc.check with
         | Forbidden_function | Complex_function
@@ -325,130 +323,54 @@ let reformat state =
         | Null_ptr_deref -> Data_format.null_deref
         | Memcheck_use_after_release -> Data_format.use_after_free
         | _ -> (fun s _ -> None) in
-      update acc inc f) |> unique
+      update arti inc f)
 
-let form_data (check, data) =
-  let total = List.length data in
-  let stat =
-    {false_pos=0; false_neg=0;confirmed=0;undecided=total;
-     took_time="-"} in
-  check,stat,List.map data ~f:(fun x -> x, Undecided)
-
-let dump name data outfile =
-  let result_to_sexp check data =
-    Sexp.List [
-        sexp_of_status Undecided;
-        Sexp.List
-         (sexp_of_check check ::
-            List.map ~f:(fun x -> Sexp.Atom x) data)] in
-  let data' =
-    List.fold ~init:[] data ~f:(fun acc (check, results) ->
-        List.fold results ~init:acc ~f:(fun acc r ->
-            result_to_sexp check r :: acc)) in
-  let s = Sexp.List (Sexp.Atom name :: data') in
-  Out_channel.with_file outfile
-    ~append:true
-    ~f:(fun out ->
-      let fmt = Format.formatter_of_out_channel out in
-      Format.fprintf fmt "%a%!" Sexp.pp_hum s)
-
-let run ~name file =
+let process arti file =
   let empty = Map.empty (module String) in
   let fresh = {cur = None; hist=empty;
                calls=empty;syms=empty;
                machs=empty;incs=[]} in
-  let state = Monad.State.exec (Main.run file) fresh in
-  let data = reformat state  |> Map.to_alist in
-  List.map data ~f:form_data
+  let results = Monad.State.exec (Main.run file) fresh in
+  update arti results
 
-let process  ?(output="summary") ~name file =
-  let empty = Map.empty (module String) in
-  let fresh = {cur = None; hist=empty;
-               calls=empty;syms=empty;
-               machs=empty;incs=[]} in
-  let state = Monad.State.exec (Main.run file) fresh in
-  let data = reformat state  |> Map.to_alist in
-  dump name data output
-
-module Result = struct
-  type t = string list [@@deriving bin_io, sexp]
-  let compare = compare_strings
-  include Comparator.Make(struct
-      type nonrec t = t [@@deriving bin_io,compare,sexp]
-      let comapre = compare_strings
- end)
-end
-
-module Results = Map.Make(Result)
-
-type full = {
-    name  : string;
-    checks : status Results.t Check.Map.t
-  }
-
-let merge x y =
-  {x with
-    checks =
-      Map.fold x.checks ~init:x.checks
-        ~f:(fun ~key:check ~data:results rs ->
-          match Map.find y.checks check with
-          | None -> rs
-          | Some results' ->
-             let results =
-               Map.fold results' ~init:results
-                 ~f:(fun ~key:result' ~data:status' results ->
-                   match Map.find results result' with
-                   | None when status' = False_neg ->
-                      Map.set results result' status'
-                   | Some Undecided ->
-                      Map.set results result' status'
-                   | _ -> results) in
-             Map.set rs check results)
-  }
-
-let merge results confirmations =
-  List.fold results ~init:[] ~f:(fun acc r ->
-      match List.find confirmations ~f:(fun x -> x.name = r.name) with
-      | None -> r :: acc
-      | Some r' -> merge r r' :: acc)
-
-let read_artifact_results data =
-  let update acc status check incident_data =
+let read_artifact_results arti data =
+  let update arti status check incident_data =
     try
       let status = status_of_sexp status in
       let check  = check_of_sexp check in
       let data   = List.map incident_data ~f:Sexp.to_string in
-      Map.update acc check ~f:(function
-          | None -> Map.set (Map.empty (module Result)) data status
-          | Some r -> Map.set r data status)
-    with _ -> acc in
-  let rec read acc = function
-    | [] -> acc
+      Artifact.update arti check data status
+    with _ -> arti in
+  let rec read arti = function
+    | [] -> arti
     | x :: xs ->
        match x with
        | Sexp.List (status :: Sexp.List (check :: incident_data) :: _) ->
-          read (update acc status check incident_data) xs
-       | _ -> read acc xs in
-  read (Map.empty (module Check)) data
+          read (update arti status check incident_data) xs
+       | _ -> read arti xs in
+  read arti data
 
-let rec read_confirmations acc ch =
-  let open Sexp in
-  match read_sexp ch with
-  | None -> acc
-  | Some s ->
-     match s with
-     | List (Atom arti :: [] ) ->
-        read_confirmations acc ch
-     | List (Atom arti :: data) ->
-        let _ = read_artifact_results data in
-        read_confirmations acc ch
-     | _ -> read_confirmations acc ch
+let read_confirmations ch =
+  let rec read acc ch =
+    match read_sexp ch with
+    | None -> acc
+    | Some s ->
+       match s with
+       | Sexp.List (Sexp.Atom arti :: []) -> read acc ch
+       | Sexp.List (Sexp.Atom arti :: data) ->
+          let acc =
+            Map.update acc arti ~f:(function
+                | None ->
+                   let arti = Artifact.create arti in
+                   read_artifact_results arti data
+                | Some arti -> read_artifact_results arti data) in
+          read acc ch
+       | _ -> read acc ch in
+  read (Map.empty (module String)) ch
 
 let parse_confirmations file =
-  In_channel.with_file file ~f:(fun ch ->
-      ignore @@ read_confirmations [] ch
-    )
+  In_channel.with_file file ~f:(fun ch -> read_confirmations ch)
 
 let parse_confirmations file =
-  if not (Sys.file_exists file) then ()
-  else parse_confirmations file
+  if not (Sys.file_exists file) then []
+  else Map.data (parse_confirmations file)
