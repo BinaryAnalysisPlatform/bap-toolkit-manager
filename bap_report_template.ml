@@ -102,13 +102,12 @@ module Tab = struct
 
   let init_from_rows ?style () = {col = 0; doc = []; style}
 
+  let mk_header h =
+    Entry.create ~tag:"th" ~style:Style.(align Center) h
+
   let with_headers ?style hdrs =
-    let align = Style.(align Center) in
-    let style = match style with
-      | None -> Some align
-      | Some s -> Some (Style.merge s align) in
     let col = List.length hdrs in
-    let doc = List.rev_map hdrs ~f:(Entry.create ~tag:"th") in
+    let doc = List.rev_map hdrs ~f:mk_header in
     {doc;col;style;}
 
   let create ?style ?(headers=[]) col =

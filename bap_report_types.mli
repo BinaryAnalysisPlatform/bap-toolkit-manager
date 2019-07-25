@@ -54,7 +54,6 @@ module Artifact : sig
   val with_time : artifact -> check -> float -> artifact
 
   val summary : artifact -> check -> stat
-
   val merge : artifact -> artifact -> artifact option
 
 end
