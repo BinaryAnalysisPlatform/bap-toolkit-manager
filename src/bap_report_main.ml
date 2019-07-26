@@ -12,7 +12,6 @@ let check_diff xs ys =
 
 let arti_checks a = Artifact.checks a |> List.map ~f:fst
 
-
 module Render = struct
 
   type t = string * artifact String.Map.t
@@ -49,14 +48,13 @@ let confirm confirmations  arti checks =
   match Map.find confirmations (Artifact.name arti) with
   | None -> arti
   | Some arti' ->
-    List.fold ~init:arti checks
-      ~f:(fun arti c ->
-          match Artifact.find_check arti' c with
-          | [] -> arti
-          | rs ->
+     List.fold ~init:arti checks
+       ~f:(fun arti c ->
+         match Artifact.find_check arti' c with
+         | [] -> arti
+         | rs ->
             List.fold rs ~init:arti
               ~f:(fun a (r,s) -> Artifact.update a c r s))
-
 
 let run_artifact ?confirmations arti recipe =
   let checks = arti_checks arti in
@@ -70,22 +68,23 @@ let run_artifact ?confirmations arti recipe =
     | None -> arti
     | Some confirmations -> confirm confirmations arti checks
 
-
 let run render name ?confirmations recipes =
   match Render.get render name with
   | None -> render
   | Some arti ->
-    List.fold ~init:render recipes ~f:(fun render reci ->
-        let arti = run_artifact ?confirmations arti reci in
-        let render = Render.update render arti in
-        Render.run render;
-        render)
+     List.fold ~init:(render,arti) recipes ~f:(fun (render,arti) reci ->
+         let arti = run_artifact ?confirmations arti reci in
+         let render = Render.update render arti in
+         Render.run render;
+         render,arti) |> fst
 
 (*
+TODO: add check that docker itself exists
 TODO: make sure that bap-toolkit image is also present in docker
 TODO: remove incidents file on exit
-TODO: maybe add option to run all recipes?
+TODO: maybe add option to run all recipes or at least list all the recipes?
 TODO: find a way to limit time?
+TODO: edit config option - make it optional
  *)
 
 let run_artifacts out artis recipes =
@@ -135,6 +134,10 @@ let run_config out path =
       ~init:render ~f:(fun render (name,recipes) ->
           run render name recipes)
 
+let check_toolkit () =
+  if not (Docker.toolkit_exists ()) then
+    failwith "can't detect/pull bap-toolkit, exiting ... "
+
 
 open Cmdliner
 
@@ -161,13 +164,16 @@ let output =
   let doc = "file with results" in
   Arg.(value & opt string "results.html" & info ["output"] ~doc)
 
-(* command? *)
 let list_recipes =
   let doc = "prints list of recieps and exits" in
   Arg.(value & flag & info ["list-recipes"] ~doc)
 
+let dump =
+  let doc = "dumps all the results in the sexp format" in
+  Arg.(value & flag & info ["dump"] ~doc)
+
 let main config artis recipes out =
-  printf "config is %s\n%!" config;
+  check_toolkit ();
   match config with
   | "" -> run_artifacts out artis recipes
   | cnf -> run_config out cnf

@@ -1,3 +1,5 @@
+## Usage
+
 The readme is under construction,
 but proposed usage of this tool is either of the next ways:
 
@@ -18,4 +20,8 @@ but proposed usage of this tool is either of the next ways:
   this will generate the file `results.html`  with the results of applying
   of recipes `av-rule-174`, `defective-symbol` and `jpl-rule-14` to the
   artifact `/bin/echo`
-  and of recipe `defective-symmbol` to the artifact `wpa-cli-2.2`.
+  and of recipe `defective-symmbol` to the artifact `wpa_cli-2.2`.
+
+
+## Build and install
+`make && make install`

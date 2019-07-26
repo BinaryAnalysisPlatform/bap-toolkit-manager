@@ -4,6 +4,9 @@ open Bap_report_types
 
 let pwd = Sys.getcwd
 let drive = "/mydrive"
+let toolkit = "binaryanalysisplatform/bap-toolkit"
+let artifacts = "binaryanalysisplatform/bap-artifacts"
+
 
 exception Command_failed of Unix.process_status
 
@@ -20,23 +23,30 @@ let cmd fmt =
       None in
   ksprintf run fmt
 
-
-let image_exists name =
-  match
-    cmd "docker images | grep binaryanalysisplatform/bap-artifacts | grep %s" name
-  with
+let image_exists ?tag image =
+  let r = match tag with
+    | None -> cmd "docker images | grep %s" image
+    | Some t -> cmd "docker images | grep %s | grep %s" image t in
+  match r with
   | None | Some "" -> false
   | _ -> true
 
-let pull arti =
+let artifact_image_exists name =
+  image_exists artifacts ~tag:name
+
+let image_pull ?tag image =
   ignore @@
-    cmd "docker pull binaryanalysisplatform/bap-artifacts:%s" arti
+    match tag with
+    | None -> cmd "docker pull %s" image
+    | Some t -> cmd "docker pull %s:%s" image t
+
+let pull_artifact name = image_pull artifacts ~tag:name
 
 let size kind arti =
   let size =
     match kind with
     | Artifact.Virtual ->
-       cmd "docker run -ti binaryanalysisplatform/bap-artifacts:%s stat -c%%s /artifact" arti
+       cmd "docker run -ti %s:%s stat -c%%s /artifact" artifacts arti
     | Artifact.Physical -> cmd "stat -c%%s %s" arti in
   match size with
   | None -> None
@@ -127,10 +137,16 @@ let find_artifact name =
     create Artifact.Physical
   else
     let kind = Artifact.Virtual in
-    if image_exists name then create kind
+    if artifact_image_exists name then create kind
     else
-      let () = pull name in
-      if image_exists name then create kind
+      let () = pull_artifact name in
+      if artifact_image_exists name then create kind
       else
         let () = eprintf "can't find/pull artifact %s\n" name in
         None
+
+let toolkit_exists () =
+  if not (image_exists toolkit) then
+    let () = image_pull toolkit in
+    image_exists toolkit
+  else true
