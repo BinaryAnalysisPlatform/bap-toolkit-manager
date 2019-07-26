@@ -49,16 +49,16 @@ end
 module Href = struct
 
   type href_kind =
-    | Local
+    (* | Local *)
     | External
 
   type t = href_kind * string
 
   let render (kind,link) = match kind with
-    | Local -> sprintf "#%s" link
+    (* | Local -> sprintf "#%s" link *)
     | External -> link
 
-  let create_local x = Local,x
+  (* let create_local x = Local,x *)
   let create_external x = External,x
 end
 
@@ -67,7 +67,7 @@ module Entry = struct
 
   let create ?(style=[]) ?href ~tag data : t = tag,style,href,data
 
-  let content (_,_,_,c) = c
+  (* let content (_,_,_,c) = c *)
 
   let style ((_,s,_,_) : t) = s
   let set_style ((a,_,c,d) : t) b = a,b,c,d
@@ -98,9 +98,7 @@ module Tab = struct
     style : Style.t option;
   }
 
-  exception Cell_mismatch
-
-  let init_from_rows ?style () = {col = 0; doc = []; style}
+  (* let init_from_rows ?style () = {col = 0; doc = []; style} *)
 
   let mk_header h =
     Entry.create ~tag:"th" ~style:Style.(align Center) h
@@ -110,15 +108,15 @@ module Tab = struct
     let doc = List.rev_map hdrs ~f:mk_header in
     {doc;col;style;}
 
-  let create ?style ?(headers=[]) col =
+  let create ?style col =
     {doc=[];col; style;}
 
   let add_cell ?href ?style word t =
     {t with doc = Entry.create ?style ?href ~tag:"td" word :: t.doc}
 
-  let add_row ?cell_style:style words t =
-    let t = if t.col = 0 then {t with col = List.length words} else t in
-    List.fold words ~init:t ~f:(fun t w -> add_cell ?style w t)
+  (* let add_row ?cell_style:style words t =
+   *   let t = if t.col = 0 then {t with col = List.length words} else t in
+   *   List.fold words ~init:t ~f:(fun t w -> add_cell ?style w t) *)
 
   let is_aligned e =
     List.exists (Entry.style e)
@@ -150,10 +148,10 @@ module Tab = struct
               match Style.get_rowspan (Entry.style e) with
               | None -> cols, row_in_rspan
               | Some 0 | Some 1 -> cols, None
-              | Some n -> t.col - 1 , Some 0 in
+              | Some _ -> t.col - 1 , Some 0 in
             let max = match row_in_rspan with
               | None | Some 0 -> t.col
-              | Some x  -> cols in
+              | Some _  -> cols in
             let row_in_rspan' = match row_in_rspan with
               | Some n when pos' = max -> Some (n + 1)
               | x -> x in
@@ -166,7 +164,7 @@ module Tab = struct
     let tab = List.rev ("</table>" :: tab) in
     String.concat tab
 
-  let spaces n = String.concat (List.init n (fun _ -> "&nbsp"))
+  let spaces n = String.concat (List.init n ~f:(fun _ -> "&nbsp"))
 
 end
 
@@ -261,7 +259,7 @@ let description_of_check = function
 
 let description_of_check c = Href.create_external (description_of_check c)
 
-let rec string_of_check = function
+let string_of_check = function
   (* | Test c -> sprintf  "Testcase: %s" (string_of_check c) *)
   | Forbidden_function -> "Forbidden functions"
   | Unused_return_value ->  "Unused return value"
@@ -299,7 +297,7 @@ let is_tableable = function
     let len = List.length x in
     List.for_all xs ~f:(fun (y,_) -> List.length y = len)
 
-let lines_number max data =
+let lines_number data =
   let len = List.length data in
   let cols = match len with
     | n when n < 10 -> 1
@@ -310,7 +308,7 @@ let lines_number max data =
   if len - rows * cols = 1 then len / (cols + 1)
   else rows
 
-let render_data ?(max_cols=6) data =
+let render_data data =
   let add_row (words,status) tab =
     let style = Style.(of_list [spaced_data; bgcolor (color_of_status status)]) in
     match words with
@@ -327,7 +325,7 @@ let render_data ?(max_cols=6) data =
       let cols = List.length fst in
       let data = List.sort data ~compare:compare_strings in
       let empty () = Tab.create ~style:(Style.custom "id=\"data\"") cols in
-      let rows = lines_number max_cols data in
+      let rows = lines_number data in
       let tabs, last, _ =
         List.fold data ~init:([],empty (),0) ~f:(fun (acc,tab,i) ws ->
             let tab = add_row ws tab in
@@ -424,7 +422,7 @@ let render_summary artifacts =
         let tab = Tab.add_cell ~style info tab in
         match checks with
         | [] ->
-          let xs = List.init 7 (fun _ -> "-") in
+          let xs = List.init 7 ~f:(fun _ -> "-") in
           List.fold xs ~init:tab ~f:(fun tab x ->
               Tab.add_cell ~style:cell_style x tab)
         | checks ->

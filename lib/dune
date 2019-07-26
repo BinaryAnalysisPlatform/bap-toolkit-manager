@@ -1,0 +1,7 @@
+(library
+   (name bap_report)
+   (libraries
+      core_kernel
+      monads
+      bos)
+   (preprocess (pps ppx_jane)))

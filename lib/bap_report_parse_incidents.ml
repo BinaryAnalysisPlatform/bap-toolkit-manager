@@ -150,7 +150,7 @@ module Make(M : Monad.S) = struct
 
   let update_machine m =
     S.update (fun s ->
-        {s with machs = Map.set s.machs m.pid m; cur = Some m.pid})
+        {s with machs = Map.set s.machs ~key:m.pid ~data:m; cur = Some m.pid})
 
 
   let opt x f =
@@ -171,7 +171,7 @@ module Make(M : Monad.S) = struct
          state.calls, m.stack
       | stack, Some prev_pc ->
          let last_few = name :: (List.take stack 5 |> List.map ~f:snd) in
-         Map.set state.calls prev_pc last_few,
+         Map.set state.calls ~key:prev_pc ~data:last_few,
          (m.pc, name) :: stack
       | _ -> state.calls, m.stack in
     update_machine {m with stack} >>= fun () ->
@@ -190,7 +190,7 @@ module Make(M : Monad.S) = struct
                  call  and call-return, therefore the
                  correct address of the can be infered like that *)
              let last_few = name :: (List.take stack' 5 |> List.map ~f:snd) in
-             Map.set s.calls pc last_few
+             Map.set s.calls ~key:pc ~data:last_few
            else s.calls in
          stack', calls
       | _ -> m.stack, s.calls in
@@ -214,7 +214,7 @@ module Make(M : Monad.S) = struct
            {s with incs={check; locs; trace; mach} :: s.incs})
 
   let incident_location (id,addrs) =
-    S.update (fun s -> {s with hist = Map.set s.hist id addrs})
+    S.update (fun s -> {s with hist = Map.set s.hist ~key:id ~data:addrs})
 
   let switch (_, id) =
     S.get () >>= fun s ->
@@ -236,7 +236,7 @@ module Make(M : Monad.S) = struct
     update_machine {m with pc = addr; prev_pc=Some m.pc}
 
   let symbol (name,addr) =
-    S.update (fun s -> {s with syms = Map.set s.syms addr name})
+    S.update (fun s -> {s with syms = Map.set s.syms ~key:addr ~data:name})
 
   let event = function
     | Switch (a,b) -> switch (a,b)
@@ -273,7 +273,7 @@ module Data_format = struct
        | Some name -> Some [name]
        | _ ->  Some [a]
 
-  let null_deref s inc =
+  let null_deref _ inc =
     match inc.locs with
     | event :: _ ->
        let last = Option.value ~default:"" (List.hd inc.trace) in
@@ -291,7 +291,7 @@ module Data_format = struct
          Some ["-----"; name; a]
       | _ -> None
 
-  let use_after_free s inc =
+  let use_after_free _ inc =
     match inc.locs with
     | use :: free :: alloc :: _ -> Some [use; free; alloc]
     | _ -> None
@@ -303,7 +303,7 @@ let rec compare_strings xs ys =
   | [],[] -> 0
   | x :: xs, y :: ys ->
      let r = String.compare x y in
-     if r = 0 then compare xs ys
+     if r = 0 then compare_strings xs ys
      else r
   | [], _ -> 1
   | _, [] -> -1
@@ -322,7 +322,7 @@ let update arti results =
         | Unused_return_value -> Data_format.unused_return
         | Null_ptr_deref -> Data_format.null_deref
         | Memcheck_use_after_release -> Data_format.use_after_free
-        | _ -> (fun s _ -> None) in
+        | _ -> (fun _ _ -> None) in
       update arti inc f)
 
 let process arti file =
@@ -356,7 +356,7 @@ let read_confirmations ch =
     | None -> acc
     | Some s ->
        match s with
-       | Sexp.List (Sexp.Atom arti :: []) -> read acc ch
+       | Sexp.List (Sexp.Atom _ :: []) -> read acc ch
        | Sexp.List (Sexp.Atom arti :: data) ->
           let acc =
             Map.update acc arti ~f:(function
