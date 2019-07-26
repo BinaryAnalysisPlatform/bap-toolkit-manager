@@ -1,0 +1,7 @@
+(executable
+   (name bap_report_main)
+   (public_name bap-report)
+   (libraries
+        bap_report
+        bap_report_types
+        core_kernel))

@@ -1,8 +1,5 @@
 open Core_kernel
 
-type artifact
-type result = string list
-
 type status =
   | Confirmed
   | False_pos
@@ -11,11 +8,11 @@ type status =
 [@@deriving sexp]
 
 type stat = {
-    false_pos : int;
-    false_neg : int;
-    confirmed : int;
-    undecided : int;
-  }
+  false_pos : int;
+  false_neg : int;
+  confirmed : int;
+  undecided : int;
+}[@@deriving sexp]
 
 type check =
   | Unused_return_value

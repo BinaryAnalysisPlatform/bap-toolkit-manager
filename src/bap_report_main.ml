@@ -1,6 +1,6 @@
 open Core_kernel
 open Bap_report.Std
-open Types
+open Bap_report_types
 
 let check_equal x y = compare_check x y = 0
 
