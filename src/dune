@@ -4,4 +4,6 @@
    (libraries
         bap_report
         bap_report_types
-        core_kernel))
+        core_kernel
+        cmdliner)
+   (preprocess (pps ppx_jane)))

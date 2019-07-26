@@ -3,7 +3,7 @@ open Bap_report_types
 
 type t
 
-val run_recipe : artifact -> string -> t
+val run_recipe : artifact -> string -> t option
 
 val time_taken : t -> float
 

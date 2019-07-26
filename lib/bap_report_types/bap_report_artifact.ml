@@ -44,9 +44,14 @@ module Result = struct
   module Map = Map.Make(Cmp)
 end
 
+type kind =
+  | Physical
+  | Virtual
+
 type t = {
   name : string;
   size : int option;
+  kind : kind option;
   data : status Result.Map.t Check.Map.t;
   time : float Check.Map.t;
 }
@@ -75,8 +80,8 @@ module Time = struct
 end
 
 
-let create ?size name = {
-  name; size; data = Check.Map.empty; time = Check.Map.empty;
+let create ?size ?kind name  = {
+  name; size; kind; data = Check.Map.empty; time = Check.Map.empty;
 }
 
 let name t = t.name
@@ -116,6 +121,8 @@ let with_size t size = {t with size=Some size}
 let with_time t check time = {t with time = Map.set t.time ~key:check ~data:time}
 
 let time t check = Map.find t.time check
+
+let kind t = t.kind
 
 let time_hum t check =
   match time t check with
@@ -185,10 +192,20 @@ let merge_size name s s' =
     notify_merge_error name None "size is different, dropping both ... ";
     None
 
+let merge_kind name k k' =
+  match k,k' with
+  | None, Some k | Some k, None -> Some k
+  | None, None -> None
+  | Some k, Some k' when k = k' -> Some k
+  | _ ->
+    notify_merge_error name None "kind is different, dropping both ... ";
+    None
+
 let merge t t' =
   if String.(t.name <> t'.name) then None
   else
     let size = merge_size t.name t.size t'.size in
     let time = merge_time t.name t.time t'.time in
     let data = merge_data t.name t.data t'.data in
-    Some ({name=t.name; size; time; data})
+    let kind = merge_kind t.name t.kind t'.kind in
+    Some ({name=t.name; kind; size; time; data})
