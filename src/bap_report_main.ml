@@ -1,7 +1,29 @@
 open Core_kernel
 open Bap_report.Std
-open Bap_report_types
 
+module Bap_artifact = struct
+  let image = "binaryanalysisplatform/bap-artifacts"
+
+  type kind =
+    | Local
+    | Image
+
+  let run_recipe a kind r =
+    match kind with
+    | Local -> Recipe.run (Artifact.name a) r
+    | Image ->  Recipe.run ~image ~tag:(Artifact.name a) "/artifact" r
+
+  let find name =
+    if String.is_prefix ~prefix:"/" name then
+      if Sys.file_exists name then
+         let size = size name in
+         Some (Local, Artifact.create ?size name)
+      else None
+    else
+      let size = size ~image ~tag:name "/artifact" in
+      Some (Image, Artifact.create ?size name)
+
+end
 
 let check_equal x y = compare_check x y = 0
 
@@ -10,21 +32,22 @@ let check_diff xs ys =
       if List.mem ys c ~equal:check_equal then ac
       else c :: ac)
 
-let arti_checks a = Artifact.checks a |> List.map ~f:fst
+let arti_checks a = Artifact.checks a
 
 module Render = struct
 
-  type t = string * artifact String.Map.t
+  type t = (Bap_artifact.kind * artifact) String.Map.t * string
 
-  let create file = file, Map.empty (module String)
+  let create file = Map.empty (module String), file
 
-  let update (out, t) arti =
-    out, Map.set t (Artifact.name arti) arti
+  let update (t, out) (kind,arti) =
+    Map.set t (Artifact.name arti) (kind,arti), out
 
-  let get (_,t) name = Map.find t name
+  let get (t,_) name = Map.find t name
 
-  let run (out,t) =
-    let doc = Template.render (Map.data t) in
+  let run (t,out) =
+    let artis = Map.data t |> List.map ~f:snd in
+    let doc = Template.render artis in
     Out_channel.with_file out
       ~f:(fun ch -> Out_channel.output_string ch doc)
 
@@ -34,51 +57,52 @@ let update_time arti checks time =
   List.fold checks ~init:arti
     ~f:(fun arti c -> Artifact.with_time arti c time)
 
-let find_artifact = Docker.find_artifact
-
-let find_artifacts names =
-  List.filter_map names ~f:Docker.find_artifact
-
 let find_confirmations path =
-  let artis = Parse.parse_confirmations path in
+  let artis = Confirmations.read  path in
   List.fold artis ~init:(Map.empty (module String))
     ~f:(fun m a -> Map.set m ~key:(Artifact.name a) ~data:a)
 
-let confirm confirmations  arti checks =
+let confirm confirmations arti checks =
   match Map.find confirmations (Artifact.name arti) with
   | None -> arti
   | Some arti' ->
      List.fold ~init:arti checks
        ~f:(fun arti c ->
-         match Artifact.find_check arti' c with
+         match Artifact.find_result arti' c with
          | [] -> arti
          | rs ->
             List.fold rs ~init:arti
               ~f:(fun a (r,s) -> Artifact.update a c r s))
 
-let run_artifact ?confirmations arti recipe =
+let run_artifact ?confirmations arti kind recipe =
   let checks = arti_checks arti in
-  match Docker.run_recipe arti recipe with
+  let recipe = Bap_artifact.run_recipe arti kind recipe in
+  let time = Recipe.time_taken recipe in
+  let arti = Incidents.process arti "incidents" in
+  let checks = check_diff (arti_checks arti) checks in
+  let arti = update_time arti checks time  in
+  match confirmations with
   | None -> arti
-  | Some result ->
-    let arti = Parse.process arti "incidents" in
-    let checks = check_diff (arti_checks arti) checks in
-    let arti = update_time arti checks (Docker.time_taken result) in
-    match confirmations with
-    | None -> arti
-    | Some confirmations -> confirm confirmations arti checks
+  | Some confirmations -> confirm confirmations arti checks
+
+let recipes_of_names names =
+  let recipes = Recipe.list () in
+  List.filter recipes
+    ~f:(fun r -> List.mem names (Recipe.name r) ~equal:String.equal)
 
 let run render name ?confirmations recipes =
+  let recipes = recipes_of_names recipes in
   match Render.get render name with
   | None -> render
-  | Some arti ->
+  | Some (kind,arti) ->
      List.fold ~init:(render,arti) recipes ~f:(fun (render,arti) reci ->
-         let arti = run_artifact ?confirmations arti reci in
-         let render = Render.update render arti in
+         let arti = run_artifact ?confirmations arti kind reci in
+         let render = Render.update render (kind,arti) in
          Render.run render;
          render,arti) |> fst
 
 (*
+TODO: add a desciption that path must be absolute for physical artifacts
 TODO: add check that docker itself exists
 TODO: make sure that bap-toolkit image is also present in docker
 TODO: remove incidents file on exit
@@ -91,7 +115,7 @@ let run_artifacts out artis recipes =
   let render =
     List.fold artis
       ~init:(Render.create out) ~f:(fun r name ->
-          match Docker.find_artifact name with
+          match Bap_artifact.find name with
           | None -> r
           | Some a -> Render.update r a) in
   ignore @@
@@ -121,22 +145,30 @@ let read_config acc path =
     In_channel.with_file path ~f:Sexp.input_sexps in
   read [] sexps
 
+let recipes_of_names names =
+  let recipes = Recipe.list () in
+  List.filter recipes
+    ~f:(fun r -> List.mem names (Recipe.name r) ~equal:String.equal)
+
 let run_config out path =
   let acts = read_config [] path  in
   let render =
     List.fold acts
       ~init:(Render.create out) ~f:(fun r (name,recipes) ->
-          match Docker.find_artifact name with
+          match Bap_artifact.find name with
           | None -> r
           | Some a -> Render.update r a) in
   ignore @@
     List.fold acts
-      ~init:render ~f:(fun render (name,recipes) ->
-          run render name recipes)
+      ~init:render
+      ~f:(fun render (name,recipes) -> run render name recipes)
 
 let check_toolkit () =
-  if not (Docker.toolkit_exists ()) then
-    failwith "can't detect/pull bap-toolkit, exiting ... "
+  let tool = "binaryanalysisplatform/bap-toolkit" in
+  if not (Docker.image_exists tool) then
+    let () = Docker.pull tool in
+    if not (Docker.image_exists tool) then
+      failwith "can't detect/pull bap-toolkit, exiting ... "
 
 
 open Cmdliner
@@ -165,12 +197,16 @@ let output =
   Arg.(value & opt string "results.html" & info ["output"] ~doc)
 
 let list_recipes =
-  let doc = "prints list of recieps and exits" in
+  let doc = "prints list of available recipes and exits" in
   Arg.(value & flag & info ["list-recipes"] ~doc)
 
 let dump =
   let doc = "dumps all the results in the sexp format" in
   Arg.(value & flag & info ["dump"] ~doc)
+
+let list_artifacts =
+  let doc = "prints list of available artifacts and exits" in
+  Arg.(value & flag & info ["list-artifacts"] ~doc)
 
 let main config artis recipes out =
   check_toolkit ();

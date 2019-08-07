@@ -389,7 +389,8 @@ let render_artifact tab artifact =
   let cell = match checks with
     | [] -> ["no incidents found"]
     | checks ->
-      List.fold checks ~init:cell ~f:(fun cell (check, data) ->
+      List.fold checks ~init:cell ~f:(fun cell check ->
+          let data = Artifact.find_result artifact check in
           let stat = Artifact.summary artifact check in
           render_check artifact check ~stat data :: cell) in
   let cell = String.concat (List.rev cell) in
@@ -427,7 +428,7 @@ let render_summary artifacts =
               Tab.add_cell ~style:cell_style x tab)
         | checks ->
           List.fold checks ~init:tab
-            ~f:(fun tab (check, _) ->
+            ~f:(fun tab check ->
                 let res = Artifact.summary arti check in
                 let time = Artifact.time_hum arti check in
                 let time = Option.value ~default:"-" time in
@@ -443,6 +444,7 @@ let render_summary artifacts =
 
 
 let render artifacts =
+  let artifacts = List.rev artifacts in
   let summary   = render_summary artifacts in
   let artifacts = render_artifacts artifacts in
   String.concat [html_header; summary; artifacts; html_bottom;]

@@ -1,13 +1,9 @@
 
-open Bap_report_types
+val image_exists : ?tag:string -> string -> bool
 
-type t
+val available : unit -> (string * string option) list
 
-val run_recipe : artifact -> string -> t option
+val run : image:string -> ?tag:string -> ?entry:string ->
+          ?mount:string * string -> string -> string option
 
-val time_taken : t -> float
-
-val find_artifact : string -> artifact option
-
-
-val toolkit_exists : unit -> bool
+val pull : ?tag:string -> string -> unit

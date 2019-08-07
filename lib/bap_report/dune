@@ -3,6 +3,6 @@
    (libraries
       core_kernel
       monads
-      bos
-      bap_report_types)
+      bap_report_types
+      bap_report_incidents)
    (preprocess (pps ppx_jane)))
