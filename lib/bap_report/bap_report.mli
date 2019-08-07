@@ -64,7 +64,6 @@ module Std : sig
       relatively to the [image], else to the host filesystem*)
   val size : ?image:string -> ?tag:string -> string -> int option
 
-
   type check =
     | Unused_return_value
     | Null_ptr_deref

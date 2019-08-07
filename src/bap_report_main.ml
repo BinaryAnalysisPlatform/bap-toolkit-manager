@@ -102,13 +102,13 @@ let run render name ?confirmations recipes =
          render,arti) |> fst
 
 (*
+TODO: check conirmations!!
 TODO: add a desciption that path must be absolute for physical artifacts
 TODO: add check that docker itself exists
 TODO: make sure that bap-toolkit image is also present in docker
 TODO: remove incidents file on exit
 TODO: maybe add option to run all recipes or at least list all the recipes?
 TODO: find a way to limit time?
-TODO: edit config option - make it optional
  *)
 
 let run_artifacts out artis recipes =
@@ -170,13 +170,28 @@ let check_toolkit () =
     if not (Docker.image_exists tool) then
       failwith "can't detect/pull bap-toolkit, exiting ... "
 
+module O = struct
+
+  type t = {
+    config    : string option;
+    artifacts : string list;
+    recipes   : string list;
+    confirms  : string option;
+    output    : string;
+  } [@@deriving fields]
+
+
+  let create a b c d e = Fields.create a b c d e
+
+end
 
 open Cmdliner
+
 
 let info = Term.info ""
 
 let config =
-  Arg.(value & opt string "" & info ~doc:"" ["from-config"])
+  Arg.(value & opt (some string) None & info ~doc:"" ["from-config"])
 
 let strings = Arg.(list string)
 
@@ -188,9 +203,9 @@ let recipes =
   let doc = "list of recipes" in
   Arg.(value & opt strings [] & info ["recipes"] ~doc)
 
-let confirmatins =
+let confirms =
   let doc = "file with confirmations" in
-  Arg.(value & opt string "" & info ["confirmations"] ~doc)
+  Arg.(value & opt (some string) None & info ["confirmations"] ~doc)
 
 let output =
   let doc = "file with results" in
@@ -208,10 +223,41 @@ let list_artifacts =
   let doc = "prints list of available artifacts and exits" in
   Arg.(value & flag & info ["list-artifacts"] ~doc)
 
-let main config artis recipes out =
-  check_toolkit ();
-  match config with
-  | "" -> run_artifacts out artis recipes
-  | cnf -> run_config out cnf
 
-let c = Term.eval (Term.(const main $config $artifacts $recipes $output),info)
+let is_specified opt ~default =
+  Cmdliner.Term.eval_peek_opts opt |>
+  fst |> Option.value ~default
+
+let print_recipes_and_exit () =
+  let recipes = Recipe.list ()  in
+  List.iter recipes ~f:(fun r ->
+      printf "%-32s %s\n" (Recipe.name r) (Recipe.description r));
+  exit 0
+
+let print_artifacts_and_exit () =
+  let images = Docker.available () in
+  List.iter images ~f:(fun (image, tag) ->
+      if String.equal image Bap_artifact.image then
+        match tag with
+        | None -> ()
+        | Some tag -> printf "%s\n" tag);
+  exit 0
+
+let main o print_recipes print_artifacts =
+  let open O in
+  check_toolkit ();
+  if print_recipes then print_recipes_and_exit ();
+  if print_artifacts then print_artifacts_and_exit ();
+  match o.config with
+  | None -> run_artifacts o.output o.artifacts o.recipes
+  | Some cnf -> run_config o.output cnf
+
+let o =
+  Term.(const O.create
+        $config
+        $artifacts
+        $recipes
+        $confirms
+        $output)
+
+let _ = Term.eval (Term.(const main $o $list_recipes $list_artifacts), info)

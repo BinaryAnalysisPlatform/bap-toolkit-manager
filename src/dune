@@ -2,7 +2,7 @@
    (name bap_report_main)
    (public_name bap-report)
    (libraries
-        bap_report
         core_kernel
+        bap_report
         cmdliner)
    (preprocess (pps ppx_jane)))
