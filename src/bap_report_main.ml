@@ -13,15 +13,31 @@ module Bap_artifact = struct
     | Local -> Recipe.run (Artifact.name a) r
     | Image ->  Recipe.run ~image ~tag:(Artifact.name a) "/artifact" r
 
+  let artifact_exists tag =
+    match Docker.get_image ~tag image with
+    | Error er ->
+       eprintf "can't find %s: %s\n" tag (Error.to_string_hum er);
+       false
+    | Ok () ->
+       let cmd = sprintf "find / -type f -name %s" tag in
+       match Docker.run ~image ~tag cmd with
+       | None | Some "" -> false
+       | _ -> true
+
+  let kind_of_name name =
+    if Sys.file_exists name then Some Local
+    else if artifact_exists name then Some Image
+    else None
+
   let find name =
-    if String.is_prefix ~prefix:"/" name then
-      if Sys.file_exists name then
-         let size = size name in
-         Some (Local, Artifact.create ?size name)
-      else None
-    else
-      let size = size ~image ~tag:name "/artifact" in
-      Some (Image, Artifact.create ?size name)
+    match kind_of_name name with
+    | None -> None
+    | Some Local ->
+       let size = size name in
+       Some (Local, Artifact.create ?size name)
+    | Some Image ->
+       let size = size ~image ~tag:name "/artifact" in
+       Some (Image, Artifact.create ?size name)
 
 end
 
@@ -85,8 +101,14 @@ let run_artifact ?confirmations arti kind recipe =
   | None -> arti
   | Some confirmations -> confirm confirmations arti checks
 
+let need_all names =
+  let names = List.map ~f:String.lowercase names in
+  List.mem names "all" ~equal:String.equal
+
 let recipes_of_names names =
   let recipes = Recipe.list () in
+  if need_all names then recipes
+  else
   List.filter recipes
     ~f:(fun r -> List.mem names (Recipe.name r) ~equal:String.equal)
 
@@ -103,11 +125,7 @@ let run render name ?confirmations recipes =
 
 (*
 TODO: check conirmations!!
-TODO: add a desciption that path must be absolute for physical artifacts
-TODO: add check that docker itself exists
-TODO: make sure that bap-toolkit image is also present in docker
-TODO: remove incidents file on exit
-TODO: maybe add option to run all recipes or at least list all the recipes?
+TODO: remove incidents file on exit ??
 TODO: find a way to limit time?
  *)
 
@@ -145,11 +163,6 @@ let read_config acc path =
     In_channel.with_file path ~f:Sexp.input_sexps in
   read [] sexps
 
-let recipes_of_names names =
-  let recipes = Recipe.list () in
-  List.filter recipes
-    ~f:(fun r -> List.mem names (Recipe.name r) ~equal:String.equal)
-
 let run_config out path =
   let acts = read_config [] path  in
   let render =
@@ -166,8 +179,8 @@ let run_config out path =
 let check_toolkit () =
   let tool = "binaryanalysisplatform/bap-toolkit" in
   if not (Docker.image_exists tool) then
-    let () = Docker.pull tool in
-    if not (Docker.image_exists tool) then
+    (* let () = Docker.pull tool in *)
+    (* if not (Docker.image_exists tool) then *)
       failwith "can't detect/pull bap-toolkit, exiting ... "
 
 module O = struct
@@ -187,8 +200,25 @@ end
 
 open Cmdliner
 
+let doc = "Bap report"
 
-let info = Term.info ""
+let man = [
+    `S "SYNOPSIS";
+    `Pre "
+      $(mname) --artifacts=... --recipes=... --confirmations=...
+      $(mname) --config=...
+      $(mname) --list-recipes
+      $(mname) --list-artifacts";
+
+    `S "Description";
+    `P "A frontend to the whole bap docker infrastructure, that hides
+       all the complexity under the hood and allow easily to run
+       various checks against various artifacts and get a frendly
+       HTML report with all the incidents found.";
+
+  ]
+
+let info = Term.info ~man ~doc "bap-report"
 
 let config =
   Arg.(value & opt (some string) None & info ~doc:"" ["from-config"])
@@ -196,11 +226,15 @@ let config =
 let strings = Arg.(list string)
 
 let artifacts =
-  let doc = "list of artifacts" in
+  let doc = "A comma-separated list of artifacts to check.
+             Every artifact is either a file in the system
+             or a TAG from binaryanalysisplatform/bap-artifacts
+             docker image" in
   Arg.(value & opt strings [] & info ["artifacts"] ~doc)
 
 let recipes =
-  let doc = "list of recipes" in
+  let doc = "list of recipes to run. A special key $(i,all)
+             can be used to run all the recipes" in
   Arg.(value & opt strings [] & info ["recipes"] ~doc)
 
 let confirms =
@@ -212,12 +246,8 @@ let output =
   Arg.(value & opt string "results.html" & info ["output"] ~doc)
 
 let list_recipes =
-  let doc = "prints list of available recipes and exits" in
+  let doc = "prints the list of available recipes and exits" in
   Arg.(value & flag & info ["list-recipes"] ~doc)
-
-let dump =
-  let doc = "dumps all the results in the sexp format" in
-  Arg.(value & flag & info ["dump"] ~doc)
 
 let list_artifacts =
   let doc = "prints list of available artifacts and exits" in
@@ -235,19 +265,16 @@ let print_recipes_and_exit () =
   exit 0
 
 let print_artifacts_and_exit () =
-  let images = Docker.available () in
-  List.iter images ~f:(fun (image, tag) ->
-      if String.equal image Bap_artifact.image then
-        match tag with
-        | None -> ()
-        | Some tag -> printf "%s\n" tag);
+  let images = Docker.available_tags Bap_artifact.image in
+  List.iter images ~f:(fun tag -> printf "%s\n" tag);
   exit 0
 
 let main o print_recipes print_artifacts =
   let open O in
   check_toolkit ();
   if print_recipes then print_recipes_and_exit ();
-  if print_artifacts then print_artifacts_and_exit ();
+  if print_artifacts then
+    print_artifacts_and_exit ();
   match o.config with
   | None -> run_artifacts o.output o.artifacts o.recipes
   | Some cnf -> run_config o.output cnf

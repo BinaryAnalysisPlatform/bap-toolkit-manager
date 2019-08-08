@@ -1,4 +1,4 @@
-
+open Core_kernel
 
 module Std : sig
 
@@ -11,9 +11,9 @@ module Std : sig
     val image_exists : ?tag:string -> string -> bool
 
 
-    (** [available ()] returns the list of all available images
-      in the user system with theirs tags (if exist) as well. *)
-    val available : unit -> (string * string option) list
+    (** [available_tags image] returns the list of all available tags
+        for the given [image]. *)
+    val available_tags : string -> string list
 
     (** [run ~image ~tag ~entry ~mount cmd] runs [cmd] with the docker
       [image].
@@ -27,6 +27,11 @@ module Std : sig
 
     (** [pull image ~tag] pulls the [image] with [tag] *)
     val pull : ?tag:string -> string -> unit
+
+    (** [get_image ~tag image] ensures that the [image]
+        with the given [tag] is available locally. If there is
+        no such image, then it will try to pull it *)
+    val get_image : ?tag:string -> string -> unit Or_error.t
 
   end
 
