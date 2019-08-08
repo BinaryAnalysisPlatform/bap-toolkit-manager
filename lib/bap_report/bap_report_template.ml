@@ -49,16 +49,16 @@ end
 module Href = struct
 
   type href_kind =
-    (* | Local *)
+    | Local
     | External
 
   type t = href_kind * string
 
   let render (kind,link) = match kind with
-    (* | Local -> sprintf "#%s" link *)
+    | Local -> sprintf "#%s" link
     | External -> link
 
-  (* let create_local x = Local,x *)
+  let create_local x = Local,x
   let create_external x = External,x
 end
 
@@ -67,7 +67,7 @@ module Entry = struct
 
   let create ?(style=[]) ?href ~tag data : t = tag,style,href,data
 
-  (* let content (_,_,_,c) = c *)
+  let content (_,_,_,c) = c
 
   let style ((_,s,_,_) : t) = s
   let set_style ((a,_,c,d) : t) b = a,b,c,d
@@ -98,7 +98,7 @@ module Tab = struct
     style : Style.t option;
   }
 
-  (* let init_from_rows ?style () = {col = 0; doc = []; style} *)
+  let init_from_rows ?style () = {col = 0; doc = []; style}
 
   let mk_header h =
     Entry.create ~tag:"th" ~style:Style.(align Center) h
@@ -114,9 +114,9 @@ module Tab = struct
   let add_cell ?href ?style word t =
     {t with doc = Entry.create ?style ?href ~tag:"td" word :: t.doc}
 
-  (* let add_row ?cell_style:style words t =
-   *   let t = if t.col = 0 then {t with col = List.length words} else t in
-   *   List.fold words ~init:t ~f:(fun t w -> add_cell ?style w t) *)
+  let add_row ?cell_style:style words t =
+    let t = if t.col = 0 then {t with col = List.length words} else t in
+    List.fold words ~init:t ~f:(fun t w -> add_cell ?style w t)
 
   let is_aligned e =
     List.exists (Entry.style e)
@@ -244,8 +244,6 @@ let lineup_elements elts =
 
 
 let description_of_check = function
-  (* | Test Null_ptr_deref -> "https://cwe.mitre.org/data/definitions/476.html"
-   * | Test Unused_return_value ->  "https://cwe.mitre.org/data/definitions/252.html" *)
   | Unused_return_value ->  "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/jpl-rule-14/descr"
   | Null_ptr_deref ->   "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-174/descr"
   | Complex_function -> "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-3/descr"
@@ -256,11 +254,9 @@ let description_of_check = function
   | Forbidden_function -> "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/forbidden-symbol/descr"
   | _ -> ""
 
-
 let description_of_check c = Href.create_external (description_of_check c)
 
 let string_of_check = function
-  (* | Test c -> sprintf  "Testcase: %s" (string_of_check c) *)
   | Forbidden_function -> "Forbidden functions"
   | Unused_return_value ->  "Unused return value"
   | Complex_function -> "Functions with cyclomatic complexity > 50"
@@ -273,10 +269,10 @@ let string_of_check = function
   | Memcheck_use_after_release -> "Use after free"
   | Untrusted_argument -> "Untrusted argument"
 
-let render_as_text text = match text with
+let render_as_text data = match data with
   | [] -> ""
-  | text ->
-    let text = List.map text ~f:(fun (x,_) -> String.concat x) in
+  | data ->
+    let text = List.map data ~f:(fun (x,_) -> String.concat x) in
     let text = String.concat text ~sep:"\n" in
     sprintf "<pre>\n%s\n</pre>" text
 
@@ -309,14 +305,15 @@ let lines_number data =
   else rows
 
 let render_data data =
-  let add_row (words,status) tab =
+  let add_row (ws,status) tab =
     let style = Style.(of_list [spaced_data; bgcolor (color_of_status status)]) in
-    match words with
+    match ws with
     | fst :: others ->
       let tab = Tab.add_cell ~style fst tab in
       List.fold others ~init:tab ~f:(fun tab w ->
           Tab.add_cell ~style w tab);
     | _ -> tab in
+  let data = List.map data ~f:(fun (i,s) -> Incident.data i, s) in
   match data with
   | [] -> ""
   | ((fst,_) :: _) as data  ->
@@ -389,10 +386,10 @@ let render_artifact tab artifact =
   let cell = match checks with
     | [] -> ["no incidents found"]
     | checks ->
-      List.fold checks ~init:cell ~f:(fun cell check ->
-          let data = Artifact.find_result artifact check in
+       List.fold checks ~init:cell ~f:(fun cell check ->
+          let incs = Artifact.incidents ~check artifact in
           let stat = Artifact.summary artifact check in
-          render_check artifact check ~stat data :: cell) in
+          render_check artifact check ~stat incs :: cell) in
   let cell = String.concat (List.rev cell) in
   Tab.add_cell ~style:Style.(align Left) cell tab
 
@@ -441,7 +438,6 @@ let render_summary artifacts =
                 Tab.add_cell ~style:cell_style (digit res.undecided) |>
                 Tab.add_cell ~style:cell_style time)) in
   String.concat [Tab.get tab; "</br>"]
-
 
 let render artifacts =
   let artifacts = List.rev artifacts in

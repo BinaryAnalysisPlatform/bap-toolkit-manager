@@ -4,5 +4,5 @@
       core_kernel
       monads
       bap_report_types
-      bap_report_incidents)
+      bap_report_read)
    (preprocess (pps ppx_jane)))

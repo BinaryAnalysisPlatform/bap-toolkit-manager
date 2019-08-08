@@ -97,8 +97,30 @@ module Std : sig
       undecided : int;
    }[@@deriving sexp]
 
-  type result = string list
-  [@@deriving bin_io,compare, sexp]
+
+  type incident
+
+
+  (* TODO: document it and don't forget to say that
+     locations in [create] are not the same as
+     incident location. That they are first addresses
+     of all locations for incident *)
+  module Incident : sig
+    type t = incident
+
+    val create :
+      ?trace:string list -> ?machine:string -> ?data:string list -> check -> string list -> t
+
+    val add_data : t -> string list -> t
+
+    val check : t -> check
+    val trace : t -> string list
+    val locations : t -> string list
+    val machine : t -> string option
+    val data : t -> string list
+
+
+  end
 
   type artifact
 
@@ -109,13 +131,14 @@ module Std : sig
     (** [create ~size name] creates a new artifact. *)
     val create : ?size:int -> string -> t
 
-    (** [update artifact check result status]
+    (** [update artifact incident status]
         updates the [artifact] with new data *)
-    val update : t -> check -> result -> status -> t
+    val update : t -> incident -> status -> t
 
-    (** [find_result artifact check] returns a list of results
-        for the [check] *)
-    val find_result  : t -> check -> (result * status) list
+    (** [incidents ~check artifact] returns the list of incidents
+        that were happen with [artifact] along with the status.
+        If [check] is set then returns only incident for the given [check] *)
+    val incidents : ?check : check -> t -> (incident * status) list
 
     (** [checks artifact] returns all the checks that were run
         against [artifact] *)
@@ -149,31 +172,18 @@ module Std : sig
     (** [summary artifact check] returns a summary for the given [check] *)
     val summary : t -> check -> stat
 
-    (** [merge artifact artifact'] merge artifacts data.
-        returns None if some certaion contradictions found, e.g.
-        when one tries to merge artifacts with different
-        names. *)
-    val merge : t -> t -> t option
-
   end
 
 
-  module Incidents : sig
+  module Read : sig
 
-    (** [process : artifact file] read incidents from [file]
-        and updates [artifact] *)
-    val process : artifact -> string -> artifact
+    (** [incidents channel] read incidents from [channel]  *)
+    val incidents : In_channel.t -> incident list
+
+    (** [confirmations channel] read confirmed incidents from [channel]  *)
+    val confirmations : In_channel.t -> (incident * status) list
 
   end
-
-  module Confirmations : sig
-
-    (** [read file] reads file with confirmations and
-        returns the list of artifacts with checks
-        that have some confirmed status *)
-    val read : string -> artifact list
-  end
-
 
   module Template : sig
 

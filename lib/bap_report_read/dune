@@ -1,4 +1,4 @@
 (library
-   (name bap_report_incidents)
+   (name bap_report_read)
    (libraries core_kernel monads bap_report_types)
    (preprocess (pps ppx_jane)))

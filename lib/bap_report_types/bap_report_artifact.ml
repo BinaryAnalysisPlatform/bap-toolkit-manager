@@ -1,6 +1,10 @@
 open Core_kernel
 open Bap_report_common
 
+module Incident = Bap_report_incident
+type incident = Incident.t
+
+
 module Check = struct
   module Cmp = struct
     type nonrec t = check [@@deriving bin_io, compare, sexp]
@@ -15,37 +19,10 @@ module Check = struct
 
 end
 
-module Result = struct
-
-  let rec compare_strings xs ys =
-    match xs, ys with
-    | [],[] -> 0
-    | x :: xs, y :: ys ->
-      let r = String.compare x y in
-      if r = 0 then compare_strings xs ys
-      else r
-    | [], _ -> 1
-    | _, [] -> -1
-
-
-  module Cmp = struct
-    type t = result [@@deriving bin_io,sexp]
-    let compare = compare_strings
-    include Comparator.Make(struct
-        type nonrec t = t [@@deriving bin_io,sexp]
-        let compare = compare
-      end)
-  end
-
-  include Cmp
-
-  module Map = Map.Make(Cmp)
-end
-
 type t = {
   name : string;
   size : int option;
-  data : status Result.Map.t Check.Map.t;
+  data : status Incident.Map.t Check.Map.t;
   time : float Check.Map.t;
 }
 
@@ -87,13 +64,14 @@ let size_hum t =
 
 let checks t = Map.to_alist t.data |> List.map ~f:fst
 
-let update t check result status =
+let update t incident status =
+  let check = Incident.check incident in
   {t with
    data =
      Map.update t.data check ~f:(function
-         | None -> Result.Map.singleton result status
+         | None -> Incident.Map.singleton incident status
          | Some res ->
-           Map.update res result ~f:(function
+            Map.update res incident ~f:(function
                | None -> status
                | Some status' when status' = Undecided -> status
                | Some status' -> status'))}
@@ -127,59 +105,12 @@ let summary t check =
             | Undecided -> fp, fn, cn, un + 1) in
     {false_pos; false_neg; confirmed; undecided;}
 
-let notify_merge_error arti check reason =
-  let where = match check with
-    | None -> arti
-    | Some check ->
-      sprintf "%s/%s"
-        arti (Sexp.to_string (sexp_of_check check)) in
-  eprintf
-    "got error while merging results for %s: %s\n"
-    where reason
-
-let merge_results name check x y =
-  Map.merge x y ~f:(fun ~key:result -> function
-      | `Left s | `Right s -> Some s
-      | `Both (ls, rs) ->
-        match ls,rs with
-        | Undecided,rs -> Some rs
-        | ls, Undecided -> Some ls
-        | ls, rs ->
-          notify_merge_error name (Some check) @@
-          sprintf "%s is marked both as %s and %s, Undecided then\n"
-            (List.fold result ~init:"" ~f:(sprintf "%s%s "))
-            (Sexp.to_string (sexp_of_status ls))
-            (Sexp.to_string (sexp_of_status rs));
-          Some Undecided)
-
-let merge_data name data data' =
-  Map.merge data data' ~f:(fun ~key:check -> function
-      | `Left r | `Right r -> Some r
-      | `Both (ls,rs) -> Some (merge_results name check ls rs))
-
-let merge_time name t t' =
-  Map.merge t t'
-    ~f:(fun ~key:check -> function
-        | `Left x | `Right x -> Some x
-        | `Both (x,y) when Float.(x = y) -> Some x
-        | `Both (_,_) ->
-          notify_merge_error name (Some check) "time is different, dropping both ... ";
-          None)
-
-let merge_size name s s' =
-  match s, s' with
-  | None, Some s
-  | Some s, None -> Some s
-  | Some s, Some s' when Int.(s = s') -> Some s
-  | None, None -> None
-  | _ ->
-    notify_merge_error name None "size is different, dropping both ... ";
-    None
-
-let merge t t' =
-  if String.(t.name <> t'.name) then None
-  else
-    let size = merge_size t.name t.size t'.size in
-    let time = merge_time t.name t.time t'.time in
-    let data = merge_data t.name t.data t'.data in
-    Some ({name=t.name; size; time; data})
+let incidents ?check t =
+  match check with
+  | None ->
+     let incs = Map.data t.data |> List.map ~f:Map.to_alist in
+     List.concat incs
+  | Some check ->
+     match Map.find t.data check with
+     | None -> []
+     | Some incs -> Map.to_alist incs

@@ -27,6 +27,3 @@ type check =
   | Memcheck_use_after_release
   | Untrusted_argument
 [@@deriving bin_io, compare, sexp]
-
-type result = string list
-[@@deriving bin_io,compare, sexp]
