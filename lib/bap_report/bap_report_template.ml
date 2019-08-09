@@ -317,8 +317,12 @@ let render_data data =
   match data with
   | [] -> ""
   | ((fst,_) :: _) as data  ->
-    if not (is_tableable data) then render_as_text data
-    else
+     let cols, data =
+       if not (is_tableable data) then
+         let data = List.map data ~f:(fun (x,s) ->
+                        [String.concat ~sep:" " x], s) in
+         1, data
+       else List.length fst, data in
       let cols = List.length fst in
       let data = List.sort data ~compare:compare_strings in
       let empty () = Tab.create ~style:(Style.custom "id=\"data\"") cols in

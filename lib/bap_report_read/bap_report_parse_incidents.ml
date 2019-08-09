@@ -70,29 +70,44 @@ let rec read ch =
     | None -> read ch
     | Some _ as r -> r
 
-
 let of_sexp_opt f s =
-  try f s |> Option.some
+  let map_sexp = function
+    | List _ -> failwith "unexpected"
+    | Atom a ->
+       let a = String.tr ~target:'-' ~replacement:'_' a in
+       Atom a in
+  try f (map_sexp s) |> Option.some
   with _ -> None
 
 let status_of_sexp  s = of_sexp_opt status_of_sexp s
 let check_of_sexp   s = of_sexp_opt check_of_sexp s
 
 let read_confirmations ch =
-  let rec read acc =
-    match read_sexp ch with
-    | None -> acc
-    | Some (List [status; check; List locs]) ->
+  let locs_of_sexp = function
+    | Atom s -> [addr_of_string s]
+    | List xs ->
+       let locs = List.map ~f:string_of_sexp xs in
+       List.map ~f:addr_of_string locs in
+  let rec confs_of_sexps acc = function
+    | [] -> acc
+    | List (status :: check :: locs :: data) :: confs ->
        let x =
          Option.(status_of_sexp status >>= fun status ->
                  check_of_sexp check >>= fun check ->
-                 let locs = List.map ~f:string_of_sexp locs in
-                 let locs = List.map ~f:addr_of_string locs in
-                 some @@ (status,check,locs)) in
-       read (x :: acc)
+                 let locs = locs_of_sexp locs in
+                 let data = List.map ~f:Sexp.to_string data in
+                 some @@ (status,check,locs,data)) in
+       confs_of_sexps (x::acc) confs
+    | _ :: confs -> confs_of_sexps acc confs in
+  let rec read acc =
+    match read_sexp ch with
+    | None -> acc
+    | Some (List (Atom name :: List confs :: _ )) ->
+       let confs = confs_of_sexps [] confs in
+       let incs = List.filter_map confs ~f:(function
+                      | None -> None
+                      | Some (status,check,locs,data) ->
+                         Some (Incident.create ~data check locs, status)) in
+       read ((name, incs) :: acc)
     | _ -> read acc in
-  read [] |>
-    List.filter_map ~f:(function
-        | None -> None
-        | Some (status,check,locs) ->
-           Some (Incident.create check locs, status))
+  read []

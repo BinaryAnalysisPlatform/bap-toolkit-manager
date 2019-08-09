@@ -78,25 +78,40 @@ let update_time arti checks time =
   List.fold checks ~init:arti
     ~f:(fun arti c -> Artifact.with_time arti c time)
 
-let find_confirmations path = []
-  (* let incs = In_channel.with_file path ~f:Read.confirmations in
-   * List.fold incs ~init:(Map.empty (module String))
-   *   ~f:(fun m (i,s) -> Map.set m ~key:(Artifact.name a) ~data:a) *)
+let map_of_alist ~init xs =
+  List.fold ~init xs ~f:(fun m (key,value) -> Map.set m key value)
 
+let read_confirmations path =
+  let incs = In_channel.with_file path ~f:Read.confirmations in
+  List.fold incs ~init:(Map.empty (module String))
+    ~f:(fun m (name,incs) ->
+      Map.update m name ~f:(function
+          | None -> map_of_alist ~init:Incident.Map.empty incs
+          | Some incs' -> map_of_alist ~init:incs' incs))
 
-let confirm confirmations arti checks = arti
-  (* match Map.find confirmations (Artifact.name arti) with
-   * | None -> arti
-   * | Some arti' ->
-   *    List.fold ~init:arti checks
-   *      ~f:(fun arti c ->
-   *        match Artifact.find_result arti' c with
-   *        | [] -> arti
-   *        | rs ->
-   *           List.fold rs ~init:arti
-   *             ~f:(fun a (r,s) -> Artifact.update a c r s)) *)
+let check_mem checks c =
+  List.mem checks c ~equal:(fun c c' -> compare_check c c' = 0)
 
-let run_artifact ?confirmations arti kind recipe =
+let confirm confirmations arti checks =
+  match Map.find confirmations (Artifact.name arti) with
+  | None -> arti
+  | Some confirmed ->
+     let arti =
+       List.fold ~init:arti checks
+         ~f:(fun arti check ->
+           let incs = Artifact.incidents ~check arti in
+           List.fold incs ~init:arti ~f:(fun arti (inc,_) ->
+               match Map.find confirmed inc with
+               | None -> arti
+               | Some status -> Artifact.update arti inc status)) in
+     Map.fold confirmed ~init:arti
+       ~f:(fun ~key:inc ~data:status arti ->
+         match status with
+         | False_neg when check_mem checks (Incident.check inc) ->
+            Artifact.update arti inc status
+         | _ -> arti)
+
+let run_artifact confirmed arti kind recipe =
   let checks = arti_checks arti in
   let recipe = Bap_artifact.run_recipe arti kind recipe in
   let time = Recipe.time_taken recipe in
@@ -106,9 +121,7 @@ let run_artifact ?confirmations arti kind recipe =
     let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
     let checks = check_diff (arti_checks arti) checks in
     let arti = update_time arti checks time  in
-    match confirmations with
-    | None -> arti
-    | Some confirmations -> confirm confirmations arti checks
+    confirm confirmed arti checks
   else arti
 
 let need_all names =
@@ -122,13 +135,13 @@ let recipes_of_names names =
   List.filter recipes
     ~f:(fun r -> List.mem names (Recipe.name r) ~equal:String.equal)
 
-let run render name ?confirmations recipes =
+let run render confirmed name recipes =
   let recipes = recipes_of_names recipes in
   match Render.get render name with
   | None -> render
   | Some (kind,arti) ->
      List.fold ~init:(render,arti) recipes ~f:(fun (render,arti) reci ->
-         let arti = run_artifact ?confirmations arti kind reci in
+         let arti = run_artifact confirmed arti kind reci in
          let render = Render.update render (kind,arti) in
          Render.run render;
          render,arti) |> fst
@@ -139,18 +152,18 @@ TODO: remove incidents file on exit ??
 TODO: find a way to limit time?
  *)
 
-let run_artifacts out artis recipes =
+let run_artifacts confirmed out artis recipes =
   let render =
     List.fold artis
       ~init:(Render.create out) ~f:(fun r name ->
           match Bap_artifact.find name with
           | None ->
-             printf "didn't find artifact %s\n" name;
+             eprintf "didn't find artifact %s, skipping ... \n" name;
              r
           | Some a -> Render.update r a) in
   ignore @@
     List.fold artis
-      ~init:render ~f:(fun render name -> run render name recipes)
+      ~init:render ~f:(fun render name -> run render confirmed name recipes)
 
 let parse_path = function
   | [Sexp.Atom x] -> Some x
@@ -175,7 +188,7 @@ let read_config acc path =
     In_channel.with_file path ~f:Sexp.input_sexps in
   read [] sexps
 
-let run_config out path =
+let run_config confirmed out path =
   let acts = read_config [] path  in
   let render =
     List.fold acts
@@ -186,7 +199,7 @@ let run_config out path =
   ignore @@
     List.fold acts
       ~init:render
-      ~f:(fun render (name,recipes) -> run render name recipes)
+      ~f:(fun render (name,recipes) -> run render confirmed name recipes)
 
 let check_toolkit () =
   let tool = "binaryanalysisplatform/bap-toolkit" in
@@ -293,9 +306,12 @@ let main o print_recipes print_artifacts =
   if print_recipes then print_recipes_and_exit ();
   if print_artifacts then
     print_artifacts_and_exit ();
+  let confirmed = match o.confirms with
+    | None -> Map.empty (module String)
+    | Some path -> read_confirmations path in
   match o.config with
-  | None -> run_artifacts o.output o.artifacts o.recipes
-  | Some cnf -> run_config o.output cnf
+  | None -> run_artifacts confirmed o.output o.artifacts o.recipes
+  | Some cnf -> run_config confirmed o.output cnf
 
 let o =
   Term.(const O.create

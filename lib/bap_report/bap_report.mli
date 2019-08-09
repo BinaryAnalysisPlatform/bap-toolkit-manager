@@ -119,6 +119,8 @@ module Std : sig
     val machine : t -> string option
     val data : t -> string list
 
+    module Map : Map.S with type Key.t = t
+    module Set : Set.S with type Elt.t = t
 
   end
 
@@ -180,8 +182,10 @@ module Std : sig
     (** [incidents channel] read incidents from [channel]  *)
     val incidents : In_channel.t -> incident list
 
-    (** [confirmations channel] read confirmed incidents from [channel]  *)
-    val confirmations : In_channel.t -> (incident * status) list
+    (** [confirmations channel] returns a list of confirmed
+        incidents associated with the name of artifact *)
+    val confirmations :
+      In_channel.t -> (string * (incident * status) list) list
 
   end
 
