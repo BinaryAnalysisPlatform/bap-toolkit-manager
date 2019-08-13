@@ -2,7 +2,9 @@
    (name bap_report_main)
    (public_name bap-report)
    (libraries
-        core_kernel
         bap_report
-        cmdliner)
+        bin_prot
+        cmdliner
+        core_kernel
+        threads.posix)
    (preprocess (pps ppx_jane)))

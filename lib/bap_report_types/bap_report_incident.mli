@@ -1,7 +1,7 @@
 open Core_kernel
 open Bap_report_common
 
-type t [@@deriving compare]
+type t [@@deriving bin_io, compare, sexp]
 
 val create :
   ?trace:string list -> ?machine:string -> ?data:string list -> check -> string list -> t

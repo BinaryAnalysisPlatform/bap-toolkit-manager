@@ -1,21 +1,21 @@
 open Core_kernel
 open Bap_report_common
 
-type addr = string [@@deriving sexp, compare]
+type addr = string [@@deriving bin_io, compare, sexp]
 
-type locs = addr list  [@@deriving sexp, compare]
+type locs = addr list  [@@deriving bin_io, compare, sexp]
 
 type aux = {
     mach  : string option;
     trace : string list;
     data  : string list;
-} [@@deriving sexp]
+} [@@deriving bin_io, sexp]
 
 type t = {
   check : check;
   locs  : locs;
   aux   : aux;
-}[@@deriving sexp]
+} [@@deriving bin_io, sexp]
 
 
 let create ?(trace=[]) ?machine ?(data=[]) check locs =

@@ -19,15 +19,15 @@ module Bap_artifact = struct
   let artifact_exists tag =
     match Docker.get_image ~tag image with
     | Error er ->
-       can't_find tag (Error.to_string_hum er);
-       false
+      can't_find tag (Error.to_string_hum er);
+      false
     | Ok () ->
-       let cmd = sprintf "find / -type f -name /artifact" in
-       match Docker.run ~image ~tag cmd with
-       | None | Some "" ->
-          can't_find tag "no such file in image";
-          false
-       | _ -> true
+      let cmd = sprintf "find / -type f -name /artifact" in
+      match Docker.run ~image ~tag cmd with
+      | None | Some "" ->
+        can't_find tag "no such file in image";
+        false
+      | _ -> true
 
   let kind_of_name name =
     if Sys.file_exists name then Some Local
@@ -38,11 +38,11 @@ module Bap_artifact = struct
     match kind_of_name name with
     | None -> None
     | Some Local ->
-       let size = size name in
-       Some (Local, Artifact.create ?size name)
+      let size = size name in
+      Some (Local, Artifact.create ?size name)
     | Some Image ->
-       let size = size ~image ~tag:name "/artifact" in
-       Some (Image, Artifact.create ?size name)
+      let size = size ~image ~tag:name "/artifact" in
+      Some (Image, Artifact.create ?size name)
 
 end
 
@@ -85,9 +85,9 @@ let read_confirmations path =
   let incs = In_channel.with_file path ~f:Read.confirmations in
   List.fold incs ~init:(Map.empty (module String))
     ~f:(fun m (name,incs) ->
-      Map.update m name ~f:(function
-          | None -> map_of_alist ~init:Incident.Map.empty incs
-          | Some incs' -> map_of_alist ~init:incs' incs))
+        Map.update m name ~f:(function
+            | None -> map_of_alist ~init:Incident.Map.empty incs
+            | Some incs' -> map_of_alist ~init:incs' incs))
 
 let check_mem checks c =
   List.mem checks c ~equal:(fun c c' -> compare_check c c' = 0)
@@ -96,20 +96,20 @@ let confirm confirmations arti checks =
   match Map.find confirmations (Artifact.name arti) with
   | None -> arti
   | Some confirmed ->
-     let arti =
-       List.fold ~init:arti checks
-         ~f:(fun arti check ->
-           let incs = Artifact.incidents ~check arti in
-           List.fold incs ~init:arti ~f:(fun arti (inc,_) ->
-               match Map.find confirmed inc with
-               | None -> arti
-               | Some status -> Artifact.update arti inc status)) in
-     Map.fold confirmed ~init:arti
-       ~f:(fun ~key:inc ~data:status arti ->
-         match status with
-         | False_neg when check_mem checks (Incident.check inc) ->
+    let arti =
+      List.fold ~init:arti checks
+        ~f:(fun arti check ->
+            let incs = Artifact.incidents ~check arti in
+            List.fold incs ~init:arti ~f:(fun arti (inc,_) ->
+                match Map.find confirmed inc with
+                | None -> arti
+                | Some status -> Artifact.update arti inc status)) in
+    Map.fold confirmed ~init:arti
+      ~f:(fun ~key:inc ~data:status arti ->
+          match status with
+          | False_neg when check_mem checks (Incident.check inc) ->
             Artifact.update arti inc status
-         | _ -> arti)
+          | _ -> arti)
 
 let run_artifact confirmed arti kind recipe =
   let checks = arti_checks arti in
@@ -132,19 +132,19 @@ let recipes_of_names names =
   let recipes = Recipe.list () in
   if need_all names then recipes
   else
-  List.filter recipes
-    ~f:(fun r -> List.mem names (Recipe.name r) ~equal:String.equal)
+    List.filter recipes
+      ~f:(fun r -> List.mem names (Recipe.name r) ~equal:String.equal)
 
 let run render confirmed name recipes =
   let recipes = recipes_of_names recipes in
   match Render.get render name with
   | None -> render
   | Some (kind,arti) ->
-     List.fold ~init:(render,arti) recipes ~f:(fun (render,arti) reci ->
-         let arti = run_artifact confirmed arti kind reci in
-         let render = Render.update render (kind,arti) in
-         Render.run render;
-         render,arti) |> fst
+    List.fold ~init:(render,arti) recipes ~f:(fun (render,arti) reci ->
+        let arti = run_artifact confirmed arti kind reci in
+        let render = Render.update render (kind,arti) in
+        Render.run render;
+        render,arti) |> fst
 
 (*
 TODO: check conirmations!!
@@ -158,12 +158,12 @@ let run_artifacts confirmed out artis recipes =
       ~init:(Render.create out) ~f:(fun r name ->
           match Bap_artifact.find name with
           | None ->
-             eprintf "didn't find artifact %s, skipping ... \n" name;
-             r
+            eprintf "didn't find artifact %s, skipping ... \n" name;
+            r
           | Some a -> Render.update r a) in
   ignore @@
-    List.fold artis
-      ~init:render ~f:(fun render name -> run render confirmed name recipes)
+  List.fold artis
+    ~init:render ~f:(fun render name -> run render confirmed name recipes)
 
 let parse_path = function
   | [Sexp.Atom x] -> Some x
@@ -197,17 +197,17 @@ let run_config confirmed out path =
           | None -> r
           | Some a -> Render.update r a) in
   ignore @@
-    List.fold acts
-      ~init:render
-      ~f:(fun render (name,recipes) -> run render confirmed name recipes)
+  List.fold acts
+    ~init:render
+    ~f:(fun render (name,recipes) -> run render confirmed name recipes)
 
 let check_toolkit () =
   let tool = "binaryanalysisplatform/bap-toolkit" in
   match Docker.get_image tool with
   | Ok () -> ()
   | Error _ ->
-     eprintf "can't detect/pull bap-toolkit, exiting ... ";
-     exit 1
+    eprintf "can't detect/pull bap-toolkit, exiting ... ";
+    exit 1
 
 module O = struct
 
@@ -229,25 +229,25 @@ open Cmdliner
 let doc = "Bap report"
 
 let man = [
-    `S "SYNOPSIS";
-    `Pre "
+  `S "SYNOPSIS";
+  `Pre "
       $(mname) --artifacts=... --recipes=...
       $(mname) --artifacts=... --recipes=... --confirmations=...
       $(mname) --config=...
       $(mname) --list-recipes
       $(mname) --list-artifacts";
 
-    `S "Description";
-    `P "A frontend to the whole bap and docker infrastructures,
+  `S "Description";
+  `P "A frontend to the whole bap and docker infrastructures,
         that hides all the complexity under the hood: no bap
         installation required, no manual pulling of docker
         images needed.";
 
-    `P  "It allows easily to run
+  `P  "It allows easily to run
         the various of checks against the various of artifacts
         and get a frendly HTML report with all the incidents found.";
 
-  ]
+]
 
 let info = Term.info ~man ~doc "bap-report"
 
@@ -310,7 +310,8 @@ let main o print_recipes print_artifacts =
     | None -> Map.empty (module String)
     | Some path -> read_confirmations path in
   match o.config with
-  | None -> run_artifacts confirmed o.output o.artifacts o.recipes
+  | None ->
+    run_artifacts confirmed o.output o.artifacts o.recipes
   | Some cnf -> run_config confirmed o.output cnf
 
 let o =

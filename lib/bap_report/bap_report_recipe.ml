@@ -1,7 +1,8 @@
 open Core_kernel
-
 open Bap_report_utils
 
+
+module Filename = Caml.Filename
 module Docker = Bap_report_docker
 
 

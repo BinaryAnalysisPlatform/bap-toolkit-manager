@@ -35,10 +35,11 @@ module Std : sig
 
   end
 
+  type recipe
 
   module Recipe : sig
 
-    type t
+    type t = recipe
 
     (** [find name] finds a recipe by its name. Return None if
       not recipe found *)
@@ -98,15 +99,14 @@ module Std : sig
    }[@@deriving sexp]
 
 
-  type incident
-
+  type incident [@@deriving bin_io, compare, sexp]
 
   (* TODO: document it and don't forget to say that
      locations in [create] are not the same as
      incident location. That they are first addresses
      of all locations for incident *)
   module Incident : sig
-    type t = incident
+    type t = incident [@@deriving bin_io, compare, sexp]
 
     val create :
       ?trace:string list -> ?machine:string -> ?data:string list -> check -> string list -> t
@@ -175,7 +175,6 @@ module Std : sig
     val summary : t -> check -> stat
 
   end
-
 
   module Read : sig
 
