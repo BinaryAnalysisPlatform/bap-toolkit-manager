@@ -111,6 +111,14 @@ let confirm confirmations arti checks =
             Artifact.update arti inc status
           | _ -> arti)
 
+let try_rename_incidents a r =
+  try
+    let name = sprintf "%s-%s.incidents" (Artifact.name a) (Recipe.name r) in
+    Unix.rename "incidents" name
+  with exn ->
+    printf "can't rename: %s\n" (Exn.to_string exn);
+    ()
+
 let run_artifact confirmed arti kind recipe =
   let checks = arti_checks arti in
   let recipe = Bap_artifact.run_recipe arti kind recipe in
@@ -118,6 +126,7 @@ let run_artifact confirmed arti kind recipe =
   let incs = "incidents" in
   if Sys.file_exists incs then
     let incs = In_channel.with_file incs ~f:Read.incidents in
+    try_rename_incidents arti recipe;
     let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
     let checks = check_diff (arti_checks arti) checks in
     let arti = update_time arti checks time  in
@@ -146,12 +155,6 @@ let run render confirmed name recipes =
         Render.run render;
         render,arti) |> fst
 
-(*
-TODO: check conirmations!!
-TODO: remove incidents file on exit ??
-TODO: find a way to limit time?
- *)
-
 let run_artifacts confirmed out artis recipes =
   let render =
     List.fold artis
@@ -173,9 +176,11 @@ let parse_actions = function
   | [Sexp.Atom target; Sexp.List recipes] ->
     let recipes = List.map recipes ~f:Sexp.to_string in
     Some (target,recipes)
+  | [Sexp.Atom target; Sexp.Atom recipe] ->
+    Some (target,[recipe])
   | _ -> None
 
-let read_config acc path =
+let read_schedule acc path =
   let rec read acc = function
     | [] -> acc
     | Sexp.List data :: xs ->
@@ -186,10 +191,10 @@ let read_config acc path =
     | _ :: xs -> read acc xs in
   let sexps =
     In_channel.with_file path ~f:Sexp.input_sexps in
-  read [] sexps
+  read [] sexps |> List.rev
 
-let run_config confirmed out path =
-  let acts = read_config [] path  in
+let run_schedule confirmed out path =
+  let acts = read_schedule [] path  in
   let render =
     List.fold acts
       ~init:(Render.create out) ~f:(fun r (name,recipes) ->
@@ -199,7 +204,8 @@ let run_config confirmed out path =
   ignore @@
   List.fold acts
     ~init:render
-    ~f:(fun render (name,recipes) -> run render confirmed name recipes)
+    ~f:(fun render (name,recipes) ->
+      run render confirmed name recipes)
 
 let check_toolkit () =
   let tool = "binaryanalysisplatform/bap-toolkit" in
@@ -209,18 +215,29 @@ let check_toolkit () =
     eprintf "can't detect/pull bap-toolkit, exiting ... ";
     exit 1
 
+let of_incidents_file output filename =
+  let incidents = In_channel.with_file filename ~f:Read.incidents in
+  let artifact = Artifact.create filename in
+  let artifact = List.fold incidents ~init:artifact ~f:(fun a i ->
+      Artifact.update a i Undecided) in
+  Out_channel.with_file output ~f:(fun ch ->
+      Out_channel.output_string ch @@
+        Template.render [artifact])
+
+
 module O = struct
 
   type t = {
-    config    : string option;
+    schedule  : string option;
     artifacts : string list;
     recipes   : string list;
     confirms  : string option;
     output    : string;
+    of_incs   : string option;
   } [@@deriving fields]
 
 
-  let create a b c d e = Fields.create a b c d e
+  let create a b c d e f = Fields.create a b c d e f
 
 end
 
@@ -233,7 +250,7 @@ let man = [
   `Pre "
       $(mname) --artifacts=... --recipes=...
       $(mname) --artifacts=... --recipes=... --confirmations=...
-      $(mname) --config=...
+      $(mname) --schedule=...
       $(mname) --list-recipes
       $(mname) --list-artifacts";
 
@@ -251,8 +268,15 @@ let man = [
 
 let info = Term.info ~man ~doc "bap-report"
 
-let config =
-  Arg.(value & opt (some string) None & info ~doc:"" ["from-config"])
+let schedule =
+  let doc = "creates a schedule of artifacts and recipes to run
+             from a provided file, that contains s-expressions in
+             the form:
+             (artifact1 (recipe1 recipe2))
+             (artifact2 recipe1)
+             (artifact3 all)
+             ... " in
+  Arg.(value & opt (some string) None & info ~doc ["schedule"])
 
 let strings = Arg.(list string)
 
@@ -284,6 +308,9 @@ let list_artifacts =
   let doc = "prints list of available artifacts and exits" in
   Arg.(value & flag & info ["list-artifacts"] ~doc)
 
+let of_incidents =
+  let doc = "create a report from file with incidents" in
+  Arg.(value & opt (some non_dir_file) None & info ["of-incidents"] ~doc)
 
 let is_specified opt ~default =
   Cmdliner.Term.eval_peek_opts opt |>
@@ -309,17 +336,25 @@ let main o print_recipes print_artifacts =
   let confirmed = match o.confirms with
     | None -> Map.empty (module String)
     | Some path -> read_confirmations path in
-  match o.config with
-  | None ->
-    run_artifacts confirmed o.output o.artifacts o.recipes
-  | Some cnf -> run_config confirmed o.output cnf
+  match o.schedule, o.of_incs with
+  | Some sch, _ -> run_schedule confirmed o.output sch
+  | _, Some file -> of_incidents_file o.output file
+  | _ -> run_artifacts confirmed o.output o.artifacts o.recipes
 
 let o =
   Term.(const O.create
-        $config
+        $schedule
         $artifacts
         $recipes
         $confirms
-        $output)
+        $output
+        $of_incidents)
 
 let _ = Term.eval (Term.(const main $o $list_recipes $list_artifacts), info)
+
+(*
+TODO: check conirmations!!
+TODO: remove incidents file on exit ??
+TODO: find a way to limit time?
+TODO: add something like a dump to (sexp?) file to render later
+*)
