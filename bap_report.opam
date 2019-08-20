@@ -1,0 +1,18 @@
+opam-version: "2.0"
+
+version: "0.1"
+homepage: "http://github.com/gitoleg/bap-report"
+license: "MIT"
+
+
+depends: [
+  "dune" {build}
+  "ocaml" {>= "4.04.0"}
+  "ocamlfind" {dev}
+  "sexplib" {dev & >= "113.33.00"}
+  "monads"
+]
+
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
