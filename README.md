@@ -1,7 +1,7 @@
 
 # Overview
 
-`bap-report` provides an easy way to run `bap` against variaty of artifacts and analysis.
+`bap-report` provides an easy way to run `bap` against variety of artifacts and analysis.
 Underneath of the hood `bap-report` is an extra layer for docker containers, so there is no
 need to install `bap` manually or to know how what arguments to feed to the docker.
 
