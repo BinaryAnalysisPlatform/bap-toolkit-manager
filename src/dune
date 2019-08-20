@@ -1,6 +1,6 @@
 (executable
    (name bap_report_main)
-   (public_name bap-tookit)
+   (public_name bap-toolkit)
    (libraries
         bap_report
         bin_prot
