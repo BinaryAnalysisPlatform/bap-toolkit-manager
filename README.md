@@ -25,8 +25,6 @@ The proposed usage is either of the next ways:
 - `bap-report --list-artifacts` will print a list of available artifacts from the
   `binaryanalysisplatform/bap-artifacts` repository.
 
-- `bap-report --artifacts=/bin/echo --recipe=forbidden-symbol`
-
 - `bap-report --artifacts=/bin/echo,wpa_cli-2.2 --recipes=defective-symbol,jpl-rule-14`
   this will generate the file `results.html` with the results of applying
   of recipes `defective-symbol` and `jpl-rule-14`  to the artifacts `/bin/echo` and `wpa_cli-2.2`.
@@ -57,6 +55,7 @@ Also, don't forget to grant an access to the docker engine for the current user:
 ```
 $: sudo usermod -a -G docker $USER
 ```
+and re-login after that
 
 ### Install in the fresh opam switch
 There are many upcoming changes in this repository that will make
