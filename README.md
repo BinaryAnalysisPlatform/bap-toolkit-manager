@@ -9,12 +9,12 @@ but proposed usage of this tool is either of the next ways:
   Note, that the first artifact will be taken from the host machine, while the second
   one will be found in `bap-artifacts` docker repository
 
-- `bap-report --from-config=<path>`
-  reads a configuration from config file at `path`.
-  the example of config file:
+- `bap-report --scedule=<path>`
+  reads a schedule of tasks from a file at `path`.
+  the example of schedule file:
   ```
-  (/bin/echo   (av-rule-174))
-  (wpa_cli-2.2 (defective-symbol))
+  (/bin/echo   av-rule-174)
+  (wpa_cli-2.2 defective-symbol)
   (/bin/echo   (defective-symbol jpl-rule-14))
   ```
   this will generate the file `results.html`  with the results of applying
