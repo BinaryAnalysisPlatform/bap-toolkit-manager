@@ -111,22 +111,14 @@ let confirm confirmations arti checks =
             Artifact.update arti inc status
           | _ -> arti)
 
-let try_rename_incidents a r =
-  try
-    let name = sprintf "%s-%s.incidents" (Artifact.name a) (Recipe.name r) in
-    Unix.rename "incidents" name
-  with exn ->
-    printf "can't rename: %s\n" (Exn.to_string exn);
-    ()
-
 let run_artifact confirmed arti kind recipe =
+  printf "running %s %s\n%!" (Artifact.name arti) (Recipe.name recipe);
   let checks = arti_checks arti in
   let recipe = Bap_artifact.run_recipe arti kind recipe in
   let time = Recipe.time_taken recipe in
   let incs = "incidents" in
   if Sys.file_exists incs then
     let incs = In_channel.with_file incs ~f:Read.incidents in
-    try_rename_incidents arti recipe;
     let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
     let checks = check_diff (arti_checks arti) checks in
     let arti = update_time arti checks time  in
@@ -353,7 +345,8 @@ let o =
 let _ = Term.eval (Term.(const main $o $list_recipes $list_artifacts), info)
 
 (*
-TODO: check conirmations!!
+TODO: there is a bug when in infering a size of an artifact
+TODO: check conirmations!! Confirmed should be False_neg if absent!
 TODO: remove incidents file on exit ??
 TODO: find a way to limit time?
 TODO: add something like a dump to (sexp?) file to render later
