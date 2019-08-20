@@ -60,9 +60,10 @@ the installation easier.
 But now one can do the following:
 
 ```
-$ git clone https://github.com/gitoleg/bap-report
-$ opam switch create 4.07.1
-$ opam install core_kernel.v0.11.1 monads cmdliner
-$ cd bap-report
-$ make && make install
+$: opam switch create 4.07.1
+$: eval `opam config env`
+$: opam install core_kernel.v0.11.1 monads cmdliner
+$: git clone https://github.com/gitoleg/bap-report
+$: cd bap-report
+$: make && make install
 ```
