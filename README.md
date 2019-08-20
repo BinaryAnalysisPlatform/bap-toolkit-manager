@@ -3,7 +3,7 @@
 
 `bap-report` provides an easy way to run `bap` against variety of artifacts and analysis.
 Underneath of the hood `bap-report` is an extra layer for docker containers, so there is no
-need to install `bap` manually or to know how what arguments to feed to the docker.
+need to install `bap` manually or to know what arguments feed to the docker.
 
 The result of the running of `bap-report` is an html file that could be later opened
 in any browser.
