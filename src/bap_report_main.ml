@@ -235,7 +235,7 @@ end
 
 open Cmdliner
 
-let doc = "Bap report"
+let doc = "Bap toolkit"
 
 let man = [
   `S "SYNOPSIS";
@@ -258,7 +258,7 @@ let man = [
 
 ]
 
-let info = Term.info ~man ~doc "bap-report"
+let info = Term.info ~man ~doc "bap-tookit"
 
 let schedule =
   let doc = "creates a schedule of artifacts and recipes to run
