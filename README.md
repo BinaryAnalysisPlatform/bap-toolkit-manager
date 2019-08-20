@@ -9,7 +9,7 @@ but proposed usage of this tool is either of the next ways:
   Note, that the first artifact will be taken from the host machine, while the second
   one will be found in `bap-artifacts` docker repository
 
-- `bap-report --scedule=<path>`
+- `bap-report --schedule=<path>`
   reads a schedule of tasks from a file at `path`.
   the example of schedule file:
   ```
