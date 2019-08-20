@@ -53,6 +53,11 @@ The proposed usage is either of the next ways:
 - docker
 - opam 2.x
 
+Also, don't forget to grant an access to the docker engine for the current user:
+```
+$: sudo usermod -a -G docker $USER
+```
+
 ### Install in the fresh opam switch
 There are many upcoming changes in this repository that will make
 the installation easier.
