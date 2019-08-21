@@ -107,24 +107,6 @@ let get_image ?tag name =
         Or_error.errorf "can't pull image %s" (with_tag ?tag name)
     else Or_error.errorf "can't detect image %s" (with_tag ?tag name)
 
-
-let stop id = ignore @@ cmd "docker container stop %s" id
-
-let remove id = ignore @@ cmd "docker container rm %s" id
-
-let clean () =
-  match cmd "docker ps --last 1" with
-  | None -> ()
-  | Some s ->
-     match String.split ~on:'\n' s with
-     | _header :: container :: _ ->
-        let id = match split_string container with
-          | id :: _ -> id
-          | _ -> "" in
-        stop id;
-        remove id
-     | _ -> ()
-
 let run ~image ?tag ?entry ?mount cmd' =
   let image = with_tag ?tag image in
   let mount = match mount with
@@ -133,6 +115,4 @@ let run ~image ?tag ?entry ?mount cmd' =
   let entry = match entry with
     | None -> ""
     | Some e -> sprintf "--entrypoint %s" e in
-  let r = cmd "docker run -ti %s %s %s %s" mount entry image cmd' in
-  clean ();
-  r
+  cmd "docker run --rm -ti %s %s %s %s" mount entry image cmd'
