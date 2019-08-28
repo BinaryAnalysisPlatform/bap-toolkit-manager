@@ -1,18 +1,56 @@
 open Core_kernel
 open Bap_report_common
 
+module Kind : sig
+
+  type t [@@deriving bin_io, compare, sexp]
+
+  val of_string : string -> t
+  val to_string : t -> string
+
+  include Identifiable.S with type t := t
+end
+
+module Locations : sig
+
+  type t [@@deriving bin_io, compare, sexp]
+
+  val create : ?prev:addr list -> addr -> t
+  val addrs : t -> addr list
+
+  include Identifiable.S with type t := t
+end
+
+type locations = Locations.t [@@deriving bin_io, compare, sexp]
+type kind = Kind.t [@@deriving bin_io, compare, sexp]
+
 type t [@@deriving bin_io, compare, sexp]
 
-val create :
-  ?trace:string list -> ?machine:string -> ?data:string list -> check -> string list -> t
 
-val add_data : t -> string list -> t
+module Id : sig
 
-val check : t -> check
-val trace : t -> string list
-val locations : t -> string list
-val machine : t -> string option
-val data : t -> string list
+  type t [@@deriving bin_io, compare, sexp]
 
-module Map : Map.S with type Key.t = t
-module Set : Set.S with type Elt.t = t
+  val create : kind -> locations -> t
+  val locations : t -> locations
+  val kind : t -> kind
+
+  include Identifiable.S with type t := t
+end
+
+type id = Id.t  [@@deriving bin_io, compare, sexp]
+
+
+val create : ?path:string list ->
+             locations -> kind -> t
+
+val of_id : id -> t
+
+val addr : t -> addr
+val locations : t -> locations
+val path : t -> string list
+val kind : t -> kind
+val id   : t -> Id.t
+
+
+include Identifiable.S with type t := t

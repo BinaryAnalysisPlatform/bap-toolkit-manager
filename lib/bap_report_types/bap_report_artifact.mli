@@ -1,23 +1,27 @@
 open Bap_report_common
 
-type t
+type t [@@deriving bin_io, compare, sexp]
 
 type incident = Bap_report_incident.t
+type incident_kind = Bap_report_incident.kind
+type incident_id = Bap_report_incident.id
 
 val create : ?size:int -> string -> t
 
 val update : t -> incident -> status -> t
 
-val incidents : ?check:check -> t -> (incident * status) list
+val incidents : ?kind:incident_kind -> t -> (incident * status) list
 
-val checks : t -> check list
+val checks : t -> incident_kind list
 
 val name   : t -> string
 val size   : t -> int option
 val size_hum :  t -> string option
 val with_size : t -> int -> t
-val time : t -> check -> float option
-val time_hum : t -> check -> string option
-val with_time : t -> check -> float -> t
+val time : t -> incident_kind -> float option
+val time_hum : t -> incident_kind -> string option
+val with_time : t -> incident_kind -> float -> t
 
-val summary : t -> check -> stat
+val summary : t -> incident_kind -> stat
+
+val find : t -> incident_id -> (incident * status) option

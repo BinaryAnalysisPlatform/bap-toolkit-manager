@@ -1,2 +1,2 @@
 
-val size : ?image:string -> ?tag:string -> string -> int option
+val get : ?image:string -> ?tag:string -> string -> int option

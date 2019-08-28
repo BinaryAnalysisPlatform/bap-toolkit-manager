@@ -9,25 +9,13 @@ let read_sexp ch =
   try Sexp.input_sexp ch |> some
   with _ -> None
 
-open Sexp
-
-let addr_of_string str =
-  match String.split str ~on:':' with
-  | x :: _ ->
-    let prefix = "0x" in
-    let x =
-      if String.is_prefix x ~prefix:"0x" then
-        String.chop_prefix_exn x ~prefix
-      else x in
-    prefix ^ String.lowercase x
-  | _ -> str
 
 let point_of_sexp x = match x with
-  | List _ -> None
-  | Atom x ->
+  | Sexp.List _ -> None
+  | Sexp.Atom x ->
     match String.split ~on:':' x  with
-    | [_; addr] -> Some (addr_of_string addr)
-    | [addr] -> Some (addr_of_string addr)
+    | [_; addr] -> Some (Addr.of_string addr)
+    | [addr] -> Some (Addr.of_string addr)
     | _ -> None
 
 let trace_of_sexps xs =
@@ -35,26 +23,29 @@ let trace_of_sexps xs =
 
 let locs_of_sexps xs =
   List.filter_map xs ~f:(function
-      | Atom s -> Some s
+      | Sexp.Atom s -> Some (Location_id.of_string s)
       | _ -> None)
 
-let of_sexp s = match s with
-  | List (Atom "incident-location" :: List [Atom loc_id; List points] :: _)  ->
-    Incident_location (loc_id, trace_of_sexps points) |> some
+
+let of_sexp s =
+  let open Sexp in
+  match s with
+  | List (Atom "incident-location" :: List [Atom id; List points] :: _)  ->
+     Incident_location (Location_id.of_string id, trace_of_sexps points) |> some
   | List (Atom "incident" :: List (Atom name :: locs) :: _) ->
-    Incident (name, locs_of_sexps locs) |> some
+     Incident (Incident.Kind.of_string name, locs_of_sexps locs) |> some
   | List (Atom "machine-switch" :: List [Atom from; Atom to_ ] :: _ ) ->
-    Switch (from,to_) |> some
+     Switch (Machine_id.of_string from, Machine_id.of_string to_) |> some
   | List (Atom "machine-fork" :: List [Atom from; Atom to_ ] :: _ ) ->
-    Fork (from,to_) |> some
+     Fork (Machine_id.of_string from, Machine_id.of_string to_) |> some
   | List (Atom "call" :: List (Atom name :: _) :: _ ) ->
-    Call name |> some
+     Call name |> some
   | List (Atom "call-return" :: List (Atom name :: _) :: _ ) ->
-    Call_return name |> some
+     Call_return name |> some
   | List (Atom "symbol" :: List [Atom name; Atom addr] :: _) ->
-    Symbol (name, addr_of_string addr) |> some
+     Symbol (name, Addr.of_string addr) |> some
   | List (Atom "pc-changed" :: Atom addr :: _) ->
-    Pc_changed (addr_of_string addr) |> some
+     Pc_changed (Addr.of_string addr) |> some
   | _ -> None
 
 let of_sexp s =
@@ -70,44 +61,36 @@ let rec read ch =
     | None -> read ch
     | Some _ as r -> r
 
-let of_sexp_opt f s =
-  let map_sexp = function
-    | List _ -> failwith "unexpected"
-    | Atom a ->
-       let a = String.tr ~target:'-' ~replacement:'_' a in
-       Atom a in
-  try f (map_sexp s) |> Option.some
-  with _ -> None
+let try_sexp f s = Option.try_with (fun () -> f s)
 
-let status_of_sexp  s = of_sexp_opt status_of_sexp s
-let check_of_sexp   s = of_sexp_opt check_of_sexp s
+let try_f f x =
+ Option.try_with (fun () -> f x)
+
+let (>>=) = Option.(>>=)
 
 let read_confirmations ch =
-  let locs_of_sexp = function
-    | Atom s -> [addr_of_string s]
-    | List xs ->
-       let locs = List.map ~f:string_of_sexp xs in
-       List.map ~f:addr_of_string locs in
-  let rec confs_of_sexps acc = function
-    | [] -> acc
-    | List (status :: check :: locs :: data) :: confs ->
-       let x =
-         Option.(status_of_sexp status >>= fun status ->
-                 check_of_sexp check >>= fun check ->
-                 let locs = locs_of_sexp locs in
-                 let data = List.map ~f:Sexp.to_string data in
-                 some @@ (status,check,locs,data)) in
-       confs_of_sexps (x::acc) confs
-    | _ :: confs -> confs_of_sexps acc confs in
-  let rec read acc =
-    match read_sexp ch with
-    | None -> acc
-    | Some (List (Atom name :: List confs :: _ )) ->
-       let confs = confs_of_sexps [] confs in
-       let incs = List.filter_map confs ~f:(function
-                      | None -> None
-                      | Some (status,check,locs,data) ->
-                         Some (Incident.create ~data check locs, status)) in
-       read ((name, incs) :: acc)
-    | _ -> read acc in
-  read []
+  let split s =
+    String.split s ~on:' ' |>
+      List.map ~f:String.strip |>
+      List.filter ~f:(fun s -> s <> "") in
+  let rec parse m = function
+    | [] -> m
+    | line :: lines ->
+       match split line with
+       | arti :: rel :: kind :: addr :: addrs ->
+          let addr  = Addr.of_string addr in
+          let addrs = List.map addrs ~f:Addr.of_string in
+          let locs = Locations.create ~prev:addrs addr in
+          let inc_kind = Incident.Kind.of_string kind in
+          let m = match String.lowercase rel with
+            | "must" ->
+               let cnf = Confirmation.(create must inc_kind locs) in
+               Map.add_multi m arti cnf
+            | "may"  ->
+               let cnf = Confirmation.(create may inc_kind locs) in
+               Map.add_multi m arti cnf
+            | _ -> m in
+          parse m lines
+       | _ -> parse m lines in
+  Map.to_alist @@
+    parse (Map.empty (module String)) (In_channel.input_lines ch)

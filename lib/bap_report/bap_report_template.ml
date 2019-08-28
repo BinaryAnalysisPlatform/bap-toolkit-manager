@@ -2,6 +2,9 @@ open Core_kernel
 
 open Bap_report_types
 
+
+module View = Bap_report_view
+
 module Style = struct
 
   type align =
@@ -243,31 +246,11 @@ let lineup_elements elts =
   s ^ "</div>"
 
 
-let description_of_check = function
-  | Unused_return_value ->  "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/jpl-rule-14/descr"
-  | Null_ptr_deref ->   "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-174/descr"
-  | Complex_function -> "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-3/descr"
-  | Non_structural_cfg -> "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-189/descr"
-  | Recursive_function  -> "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/jpl-rule-4/descr"
-  | Memcheck_use_after_release -> "https://cwe.mitre.org/data/definitions/416.html"
-  | Memcheck_double_release -> "https://cwe.mitre.org/data/definitions/415.html"
-  | Forbidden_function -> "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/forbidden-symbol/descr"
-  | _ -> ""
+let description_of_check view inc =
+  let link = Option.value ~default:"" (View.web view inc) in
+  Href.create_external link
 
-let description_of_check c = Href.create_external (description_of_check c)
-
-let string_of_check = function
-  | Forbidden_function -> "Forbidden functions"
-  | Unused_return_value ->  "Unused return value"
-  | Complex_function -> "Functions with cyclomatic complexity > 50"
-  | Recursive_function -> "Recursive functions"
-  | Non_structural_cfg -> "Functions with non-structural cfg"
-  | Null_ptr_deref -> "Null pointer dereference"
-  | Hardcoded_socket_address -> "Hardcoded socket address"
-  | Memcheck_double_release -> "Memory check: double free"
-  | Memcheck_out_of_bound -> "Memory check: out of bound"
-  | Memcheck_use_after_release -> "Use after free"
-  | Untrusted_argument -> "Untrusted argument"
+let string_of_check view inc = View.name view inc
 
 let render_as_text data = match data with
   | [] -> ""
@@ -304,7 +287,7 @@ let lines_number data =
   if len - rows * cols = 1 then len / (cols + 1)
   else rows
 
-let render_data data =
+let render_data view data =
   let add_row (ws,status) tab =
     let style = Style.(of_list [spaced_data; bgcolor (color_of_status status)]) in
     match ws with
@@ -313,7 +296,7 @@ let render_data data =
       List.fold others ~init:tab ~f:(fun tab w ->
           Tab.add_cell ~style w tab);
     | _ -> tab in
-  let data = List.map data ~f:(fun (i,s) -> Incident.data i, s) in
+  let data = List.map data ~f:(fun (i,s) -> View.data view i, s) in
   match data with
   | [] -> ""
   | ((fst,_) :: _) as data  ->
@@ -336,9 +319,9 @@ let render_data data =
       lineup_elements tabs
 
 
-let render_checkname arti check =
-  let id = sprintf "%s+%s" arti (Sexp.to_string (sexp_of_check check)) in
-  sprintf "<b id=\"%s\">%s</b>" id (string_of_check check)
+let render_checkname view arti kind =
+  let id = sprintf "%s+%s" arti (Incident.Kind.to_string kind) in
+  sprintf "<b id=\"%s\">%s</b>" id (string_of_check view kind)
 
 let total_of_stat s = s.confirmed + s.false_pos + s.false_neg + s.undecided
 
@@ -357,14 +340,14 @@ let render_time = function
   | Some s ->
     sprintf "<pre>Time: %s</pre>" s
 
-let render_check artifact check ?stat data =
+let render_check view artifact check ?stat data =
   let name = Artifact.name artifact in
   let time = Artifact.time_hum artifact check in
   String.concat [
-    render_checkname name check;
+    render_checkname view name check;
     render_time time;
     render_stat stat;
-    render_data data;
+    render_data view data;
     "</br>";
   ]
 
@@ -374,10 +357,10 @@ let ref_to_top = {|<p><a href="#top">Top</a></p>|}
 let arti_size arti =
   Option.value ~default:"unknown" (Artifact.size_hum arti)
 
-let render_artifact tab artifact =
+let render_artifact view tab artifact =
   let name = Artifact.name artifact in
   let size = arti_size artifact in
-  let checks = Artifact.checks artifact in
+  let kinds = Artifact.checks artifact in
   let arti =
     sprintf "<pre><h3>%s</h3>size: %s</pre>" name size in
   let tab = Tab.add_cell arti tab in
@@ -387,23 +370,23 @@ let render_artifact tab artifact =
     ref_to_top;
     sprintf "<p id=\"%s\"> </p>" name;
   ] in
-  let cell = match checks with
+  let cell = match kinds with
     | [] -> ["no incidents found"]
-    | checks ->
-       List.fold checks ~init:cell ~f:(fun cell check ->
-          let incs = Artifact.incidents ~check artifact in
-          let stat = Artifact.summary artifact check in
-          render_check artifact check ~stat incs :: cell) in
+    | kinds ->
+       List.fold kinds ~init:cell ~f:(fun cell kind ->
+          let incs = Artifact.incidents ~kind artifact in
+          let stat = Artifact.summary artifact kind in
+          render_check view artifact kind ~stat incs :: cell) in
   let cell = String.concat (List.rev cell) in
   Tab.add_cell ~style:Style.(align Left) cell tab
 
-let render_artifacts artis =
+let render_artifacts view artis =
   let style = Style.custom
       "id=\"Results\" style=\"width:100%\" frame=void rules=rows" in
   let init = Tab.create ~style 2 in
-  Tab.get @@ List.fold artis ~init ~f:render_artifact
+  Tab.get @@ List.fold artis ~init ~f:(render_artifact view)
 
-let render_summary artifacts =
+let render_summary view artifacts =
   let cell_style = Style.(align Center) in
   let digit = string_of_int in
   let hdr =
@@ -433,8 +416,8 @@ let render_summary artifacts =
                 let res = Artifact.summary arti check in
                 let time = Artifact.time_hum arti check in
                 let time = Option.value ~default:"-" time in
-                Tab.add_cell ~href:(description_of_check check)
-                  (string_of_check check) tab |>
+                Tab.add_cell ~href:(description_of_check view check)
+                  (string_of_check view check) tab |>
                 Tab.add_cell ~style:cell_style (digit (total_of_stat res)) |>
                 Tab.add_cell ~style:cell_style (digit res.confirmed) |>
                 Tab.add_cell ~style:cell_style (digit res.false_pos) |>
@@ -443,8 +426,8 @@ let render_summary artifacts =
                 Tab.add_cell ~style:cell_style time)) in
   String.concat [Tab.get tab; "</br>"]
 
-let render artifacts =
+let render view artifacts =
   let artifacts = List.rev artifacts in
-  let summary   = render_summary artifacts in
-  let artifacts = render_artifacts artifacts in
+  let summary   = render_summary view artifacts in
+  let artifacts = render_artifacts view artifacts in
   String.concat [html_header; summary; artifacts; html_bottom;]
