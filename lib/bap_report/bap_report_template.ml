@@ -340,16 +340,28 @@ let render_time = function
   | Some s ->
     sprintf "<pre>Time: %s</pre>" s
 
-let render_check view artifact check ?stat data =
+let no_incidents = "<pre>no incidents found</pre>"
+
+let render_check view artifact kind =
   let name = Artifact.name artifact in
-  let time = Artifact.time_hum artifact check in
-  String.concat [
-    render_checkname view name check;
-    render_time time;
-    render_stat stat;
-    render_data view data;
-    "</br>";
-  ]
+  let time = Artifact.time_hum artifact kind in
+  match Artifact.incidents ~kind artifact with
+  | [] ->
+    String.concat [
+      render_checkname view name kind;
+      render_time time;
+      no_incidents;
+      "</br>";
+   ]
+  | data ->
+    let stat = Artifact.summary artifact kind in
+    String.concat [
+      render_checkname view name kind;
+      render_time time;
+      render_stat (Some stat);
+      render_data view data;
+      "</br>";
+    ]
 
 let ref_to_top = {|<p><a href="#top">Top</a></p>|}
 
@@ -371,12 +383,10 @@ let render_artifact view tab artifact =
     sprintf "<p id=\"%s\"> </p>" name;
   ] in
   let cell = match kinds with
-    | [] -> ["no incidents found"]
+    | [] -> [no_incidents]
     | kinds ->
        List.fold kinds ~init:cell ~f:(fun cell kind ->
-          let incs = Artifact.incidents ~kind artifact in
-          let stat = Artifact.summary artifact kind in
-          render_check view artifact kind ~stat incs :: cell) in
+          render_check view artifact kind :: cell) in
   let cell = String.concat (List.rev cell) in
   Tab.add_cell ~style:Style.(align Left) cell tab
 

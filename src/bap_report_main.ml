@@ -106,12 +106,15 @@ let confirm confirmations arti kinds =
   match Map.find confirmations (Artifact.name arti) with
   | None -> arti
   | Some confirmed ->
+     let checks = Artifact.checks arti in
      Map.fold confirmed ~init:arti ~f:(fun ~key:id ~data:conf arti ->
+         let k = Confirmation.incident_kind conf in
+         if not (List.mem checks k ~equal:Incident.Kind.equal) then arti
+         else
          match Artifact.find arti id with
          | Some (inc,st) ->
             let status = Confirmation.validate conf (Some st) in
             Artifact.update arti inc status
-
          | None ->
             match Confirmation.validate conf None with
             | False_neg as status ->
@@ -274,7 +277,7 @@ let main o print_recipes print_artifacts =
   let save artis =
     match o.store with
     | None -> ()
-    | Some file -> Bap_report_dump.dump ~update:o.update file artis in
+    | Some file -> Bap_report_dump.dump file artis in
   let tool = match Tool.of_string o.tool with
        | Ok tool -> tool
        | Error er ->
@@ -290,6 +293,11 @@ let main o print_recipes print_artifacts =
     | None -> default_view
     | Some f -> View.of_file f in
   let render = Render.create view o.output in
+  let render = match o.store, o.update with
+    | Some file, true ->
+       let artis = Bap_report_dump.read file in
+       List.fold artis ~init:render ~f:(fun r a -> Render.update r (Local,a))
+    | _ -> render in
   match o.schedule, o.of_incs, o.of_db with
   | Some sch, _, _ ->
      let artis = run_schedule tool render confirmed sch in

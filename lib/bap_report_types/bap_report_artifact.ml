@@ -68,6 +68,10 @@ let update t incident status =
                | Some (inc,status') when status' = Undecided -> inc,status
                | Some x -> x))}
 
+let no_incidents t kind =
+  {t with data = Map.set t.data kind (Map.empty (module Id))}
+
+
 let find_result t kind =
   match Map.find t.data kind with
   | None -> []
