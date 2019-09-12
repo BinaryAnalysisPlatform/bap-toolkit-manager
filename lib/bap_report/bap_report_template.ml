@@ -300,23 +300,23 @@ let render_data view data =
   match data with
   | [] -> ""
   | ((fst,_) :: _) as data  ->
-     let cols, data =
-       if not (is_tableable data) then
-         let data = List.map data ~f:(fun (x,s) ->
-                        [String.concat ~sep:" " x], s) in
-         1, data
-       else List.length fst, data in
-      let cols = List.length fst in
-      let data = List.sort data ~compare:compare_strings in
-      let empty () = Tab.create ~style:(Style.custom "id=\"data\"") cols in
-      let rows = lines_number data in
-      let tabs, last, _ =
-        List.fold data ~init:([],empty (),0) ~f:(fun (acc,tab,i) ws ->
-            let tab = add_row ws tab in
-            if i + 1 < rows then acc, tab, i + 1
-            else tab :: acc, empty (), 0) in
-      let tabs = List.rev_map (last :: tabs) ~f:Tab.get in
-      lineup_elements tabs
+    let cols, data =
+      if not (is_tableable data) then
+        let data = List.map data ~f:(fun (x,s) ->
+            [String.concat ~sep:" " x], s) in
+        1, data
+      else List.length fst, data in
+    let cols = List.length fst in
+    let data = List.sort data ~compare:compare_strings in
+    let empty () = Tab.create ~style:(Style.custom "id=\"data\"") cols in
+    let rows = lines_number data in
+    let tabs, last, _ =
+      List.fold data ~init:([],empty (),0) ~f:(fun (acc,tab,i) ws ->
+          let tab = add_row ws tab in
+          if i + 1 < rows then acc, tab, i + 1
+          else tab :: acc, empty (), 0) in
+    let tabs = List.rev_map (last :: tabs) ~f:Tab.get in
+    lineup_elements tabs
 
 
 let render_checkname view arti kind =
@@ -352,7 +352,7 @@ let render_check view artifact kind =
       render_time time;
       no_incidents;
       "</br>";
-   ]
+    ]
   | data ->
     let stat = Artifact.summary artifact kind in
     String.concat [
@@ -385,7 +385,7 @@ let render_artifact view tab artifact =
   let cell = match kinds with
     | [] -> [no_incidents]
     | kinds ->
-       List.fold kinds ~init:cell ~f:(fun cell kind ->
+      List.fold kinds ~init:cell ~f:(fun cell kind ->
           render_check view artifact kind :: cell) in
   let cell = String.concat (List.rev cell) in
   Tab.add_cell ~style:Style.(align Left) cell tab

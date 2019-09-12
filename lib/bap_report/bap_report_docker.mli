@@ -1,13 +1,32 @@
 open Core_kernel
 
+module Image : sig
 
-val image_exists : ?tag:string -> string -> bool
+  type t
 
-val available_tags: string -> string list
+  val of_string : string -> t Or_error.t
+  val of_string_exn : string -> t
 
-val run : image:string -> ?tag:string -> ?entry:string ->
-          ?mount:string * string -> string -> string option
+  val to_string : t -> string
 
-val pull : ?tag:string -> string -> unit
+  val name : t -> string
+  val tag  : t -> string option
 
-val get_image : ?tag:string -> string -> unit Or_error.t
+  val with_tag : t -> string -> t
+
+  val exists : t -> bool
+
+  val get : t -> unit Or_error.t
+
+  val pull : t -> unit
+
+  val tags: t -> string list
+end
+
+type image = Image.t
+
+val run : ?entry:string ->
+          ?mount:string * string ->
+          image ->
+          string ->
+          string option

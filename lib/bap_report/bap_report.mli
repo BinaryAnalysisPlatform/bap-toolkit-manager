@@ -2,40 +2,56 @@ open Core_kernel
 
 module Std : sig
 
+  (** docker image  *)
+  type image
+
   module Docker : sig
+    module Image : sig
 
-    (** [image_exists image ~tag] returns true if
-      the [image] with [tag] exists. Returns false
-      otherwise (e.g. if tag is set, but image with such
-      tag is not found. *)
-    val image_exists : ?tag:string -> string -> bool
+      type t = image
 
+      (** [of_string name] creates a new image from string.
+          Returns Error if name isn't a proper docker image name.
+          Image tag can be fed with ":" separator to designate tag. *)
+      val of_string : string -> t Or_error.t
 
-    (** [available_tags image] returns the list of all available tags
-        for the given [image]. *)
-    val available_tags : string -> string list
+      (** [of_string_exn name] is same as [of_string] but raises
+          Invalid_argument if name isn'y a proper docker image name. *)
+      val of_string_exn : string -> t
 
-    (** [run ~image ~tag ~entry ~mount cmd] runs [cmd] with the docker
-      [image].
+      (** [exists image] returns true if
+          the [image] exists. Returns false
+          otherwise (e.g. image exists, but image's tag is not found *)
+      val exists : t -> bool
+
+      (** [tags image] returns the list of all available tags
+          for the given [image]. *)
+      val tags : t -> string list
+
+      (** [pull image] pulls the [image] with [tag] *)
+      val pull : t -> unit
+
+      (** [get_image image] ensures that the [image]
+          is available locally. If there is
+          no such image, then it will try to pull it *)
+      val get : t -> unit Or_error.t
+
+      (** [with_tag t tag] return the image [r] with a new [tag] *)
+      val with_tag: t -> string -> t
+
+    end
+
+    (** [run ~entry ~mount image cmd] runs [cmd] with the docker [image].
 
       @param mount defines a mounting volume as a pair of pathes
              in the host and in the image.
 
       @param entry override an entrypoint for the [image] *)
-    val run : image:string -> ?tag:string -> ?entry:string ->
-              ?mount:string * string -> string -> string option
-
-    (** [pull image ~tag] pulls the [image] with [tag] *)
-    val pull : ?tag:string -> string -> unit
-
-    (** [get_image ~tag image] ensures that the [image]
-        with the given [tag] is available locally. If there is
-        no such image, then it will try to pull it *)
-    val get_image : ?tag:string -> string -> unit Or_error.t
+    val run : ?entry:string ->
+              ?mount:string * string -> image -> string -> string option
 
   end
 
-  type tool
   type recipe
   type artifact [@@deriving bin_io, compare, sexp]
   type addr [@@deriving bin_io,compare,sexp]
@@ -60,57 +76,60 @@ module Std : sig
   type incident_id   [@@deriving bin_io, compare, sexp]
   type confirmation  [@@deriving bin_io, compare, sexp]
 
-
-  (** Tool is a docker image that responsible for running recipes *)
-  module Tool : sig
-
-    type t = tool
-
-    (** [of_string name] creates a new tool from string.
-        Returns Error if name can't be a proper docker image name.
-        Image tag can be fed with ":" separator. *)
-    val of_string : string -> t Or_error.t
-
-    val name : t -> string
-    val tag  : t -> string option
-  end
-
-
   module Recipe : sig
 
     type t = recipe
 
     (** [find tool name] finds a recipe by its name. Return None if
         not recipe found *)
-    val find : tool -> string -> t option
+    val find : image -> string -> t option
 
     (** [list tool ] returns the list of the recipes
         that are provided by [tool]. *)
-    val list : tool -> t list
+    val list : image -> t list
 
     (** [name recipe] returns the name of the recipe  *)
     val name : t -> string
 
-    (** [description recipe]returns the description of the recipe *)
+    (** [description recipe] returns the description of the recipe *)
     val description : t -> string
 
-    (** [run ~tool ~image ~tag path recipe] runs the recipe.
-      if [image] and/or [tag] is set then [path] is considered
-      relatively to the [image], else to the host filesystem  *)
-    val run : tool:tool -> ?image:string -> ?tag:string -> string -> t -> t
+    (** [add_parameter t ~name ~value] returns a recipe [t]
+        with the parameter [name] bound to [value] *)
+    val add_parameter : t -> name:string -> value:string -> t
 
-    (** [time_taken recipe] returns a time that was spent for
-      the last {run} command *)
-    val time_taken : t -> float
+    val to_string : t -> string
+  end
+
+  module Job : sig
+    type t
+
+    (** [run t ~tool ~image path ] runs the recipe.
+      [tool] is an image responsible for running the recipe.
+      if [image] is set then [path] is considered
+      relatively to the [image], else to the host filesystem.
+      returns a time that was spent to process the recipe. *)
+    val run : recipe -> tool:image -> ?image:image -> string -> t
+
+    (** [time job] returns time  in seconds spent for the job [t] *)
+    val time : t -> float
+
+    (** [results t] returns a name of arhive where all the results
+        were saved: incidents, log, output etc *)
+    val results : t -> string
+
+    (** [incidents t] returns a list of incidents *)
+    val incidents : t -> incident list
 
   end
 
+
   module Size : sig
 
-   (** [get ?image ?tag path] returns the size of the file at [path].
-      if [image] and/or [tag] is set then [path] is considered
+   (** [get ?image path] returns the size of the file at [path].
+      if [image] is set then [path] is considered
       relatively to the [image], else to the host filesystem*)
-    val get : ?image:string -> ?tag:string -> string -> int option
+    val get : ?image:image -> string -> int option
 
   end
 
@@ -123,6 +142,13 @@ module Std : sig
     include Identifiable.S   with type t := t
   end
 
+  (** Locations is a non-empty sequence of addresses.
+      E.g. for use-after-free incident locations
+      will be contain three addresses:
+      - address of memory allocation
+      - address of memory free
+      - address of usage after free.
+      The last one is considered as incident address *)
   module Locations : sig
 
     type t = locations [@@deriving bin_io, compare, sexp]
@@ -133,31 +159,33 @@ module Std : sig
     include Identifiable.S   with type t := t
   end
 
-  (* TODO: document it and don't forget to say that
-     locations in [create] are not the same as
-     incident location. That they are first addresses
-     of all locations for incident *)
+  (** Incident is an event happened during the analysis.
+      It is defined unambigously by it's locations and
+      it's kind. The kind of the incident is defined
+      by each analysis independently, e.g.
+      - null-pointer-dereference
+      - use-after-free
+      - recursice-function *)
   module Incident : sig
 
     module Kind : sig
       type t = incident_kind  [@@deriving bin_io, compare, sexp]
-
       val of_string : string -> t
       val to_string : t -> string
-
       include Identifiable.S   with type t := t
     end
 
     module Id : sig
       type t = incident_id  [@@deriving bin_io, compare, sexp]
-
       val create : incident_kind -> locations -> t
-
       include Identifiable.S   with type t := t
     end
 
     type t = incident [@@deriving bin_io, compare, sexp]
 
+    (** [create path locs kind] creates a new incident.
+        [path] is a sequence of function calls that leds to
+        incident, need just for display purposes. *)
     val create : ?path:string list -> locations -> incident_kind -> t
 
     val of_id : incident_id -> t
@@ -174,6 +202,7 @@ module Std : sig
     include Identifiable.S   with type t := t
   end
 
+  (** artifact is an object of analysis.  *)
   module Artifact : sig
 
     type t = artifact [@@deriving bin_io, compare, sexp]
@@ -226,6 +255,8 @@ module Std : sig
         along with its status, if any found *)
     val find : t -> incident_id -> (incident * status) option
 
+    val merge : t -> t -> t option
+
   end
 
 
@@ -273,6 +304,7 @@ module Std : sig
 
   end
 
+  (** View describes a way to display the results of an analysis.  *)
   module View : sig
 
     type col =
@@ -306,8 +338,22 @@ module Std : sig
 
     (** [confirmations channel] returns a list of confirmed
         incidents associated with the name of artifact *)
-    val confirmations :
-      In_channel.t -> (string * confirmation list) list
+    val confirmations : In_channel.t -> (string * confirmation list) list
+
+    module Helper : sig
+
+      (** [words ?comments channel] returns a list of lines, where
+          each line is splitted on words.
+          if [comments] is set, then lines with such prefix will be
+          ignored. Empty lines are ignored too.*)
+      val words : ?comments:string -> In_channel.t -> string list list
+
+      (** [lines ~comments channel]  returns a list of lines.
+          if [comments] is set, then lines with such prefix will be
+          ignored. Empty lines are ignored too. *)
+      val lines :  ?comments:string -> In_channel.t -> string list
+
+    end
 
   end
 

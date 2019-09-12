@@ -31,8 +31,8 @@ let find_info t k ~f =
 
 let name t kind =
   match find_info t kind ~f:(function
-            | Alias a -> Some a
-            | _ -> None) with
+      | Alias a -> Some a
+      | _ -> None) with
   | None -> Incident.Kind.to_string kind
   | Some a -> a
 
@@ -42,7 +42,7 @@ let path t inc =
       | _ -> None) with
   | None -> []
   | Some n ->
-     List.take (List.rev @@ Incident.path inc) n
+    List.take (List.rev @@ Incident.path inc) n
 
 let web t inc =
   find_info t inc ~f:(function
@@ -64,18 +64,18 @@ let data t inc =
     | None -> [Name; Addr]
     | Some cols -> cols in
   List.rev @@
-    List.fold cols ~init:[] ~f:(fun acc -> function
-        | Path n ->
-           (List.rev (List.take (Incident.path inc) n)) @ acc
-        | Name ->
-           let name = match symbol inc with
-             | None -> name t kind
-             | Some sym -> sym in
-           name :: acc
-        | Addr -> Addr.to_string (Incident.addr inc) :: acc
-        | Locations ->
-           let addrs = Locations.addrs (Incident.locations inc) in
-           List.rev_map ~f:Addr.to_string addrs @ acc)
+  List.fold cols ~init:[] ~f:(fun acc -> function
+      | Path n ->
+        (List.rev (List.take (Incident.path inc) n)) @ acc
+      | Name ->
+        let name = match symbol inc with
+          | None -> name t kind
+          | Some sym -> sym in
+        name :: acc
+      | Addr -> Addr.to_string (Incident.addr inc) :: acc
+      | Locations ->
+        let addrs = Locations.addrs (Incident.locations inc) in
+        List.rev_map ~f:Addr.to_string addrs @ acc)
 
 let read_sexp ch =
   try Sexp.input_sexp ch |> Option.some
@@ -100,12 +100,12 @@ let info_of_sexp s =
   let open Sexp in
   match s with
   | List (Atom s :: Atom kind :: data) ->
-     let data =  match s with
-       | "alias" -> get_alias data
-       | "web"   -> get_web data
-       | "tab"   -> get_tab data
-       | _ -> None in
-     Option.value_map data ~default:None ~f:(fun x -> Some (kind,x))
+    let data = match s with
+      | "alias" -> get_alias data
+      | "web"   -> get_web data
+      | "tab"   -> get_tab data
+      | _ -> None in
+    Option.value_map data ~default:None ~f:(fun x -> Some (kind,x))
   | _ -> None
 
 let info_of_str str =
@@ -113,20 +113,20 @@ let info_of_str str =
     Sexp.of_string str |> info_of_sexp
   with _ -> None
 
+module Read = Bap_report_read.Helper
 
 let read ch =
   let t = create () in
-  let rec loop ()  =
-    match In_channel.input_line ch with
-    | None -> ()
-    | Some line when String.is_prefix ~prefix:"#" line -> loop ()
-    | Some s ->
-       match info_of_str s with
-       | None -> loop ()
-       | Some (kind,info) ->
-          update t (Incident.Kind.of_string kind) info;
-          loop () in
-  loop ();
+  let rec loop = function
+    | [] -> ()
+    | line :: lines ->
+      let line = sprintf "(%s)" line in
+      match info_of_str line with
+      | None -> loop lines
+      | Some (kind,info) ->
+        update t (Incident.Kind.of_string kind) info;
+        loop lines in
+  loop (Read.lines ~comments:"#" ch);
   t
 
 let of_file fname = In_channel.with_file fname ~f:read

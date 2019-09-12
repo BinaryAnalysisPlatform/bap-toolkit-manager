@@ -9,10 +9,10 @@ type kind =
 type locs = Bap_report_incident.locations [@@deriving sexp,compare,bin_io]
 
 type t = {
-    locs : locs;
-    kind : Bap_report_incident.kind;
-    conf : kind;
-  } [@@deriving sexp,compare,bin_io]
+  locs : locs;
+  kind : Bap_report_incident.kind;
+  conf : kind;
+} [@@deriving sexp,compare,bin_io]
 
 
 let must = Must

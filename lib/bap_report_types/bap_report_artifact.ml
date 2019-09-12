@@ -63,7 +63,7 @@ let update t incident status =
      Map.update t.data kind ~f:(function
          | None -> Id.Map.singleton id (incident,status)
          | Some res ->
-            Map.update res id ~f:(function
+           Map.update res id ~f:(function
                | None -> incident,status
                | Some (inc,status') when status' = Undecided -> inc,status
                | Some x -> x))}
@@ -104,12 +104,12 @@ let summary t kind =
 let incidents ?kind t =
   match kind with
   | None ->
-     let incs = Map.data t.data |> List.map ~f:Map.data in
-     List.concat incs
+    let incs = Map.data t.data |> List.map ~f:Map.data in
+    List.concat incs
   | Some kind ->
-     match Map.find t.data kind with
-     | None -> []
-     | Some incs -> Map.data incs
+    match Map.find t.data kind with
+    | None -> []
+    | Some incs -> Map.data incs
 
 
 let find t id =
@@ -117,3 +117,44 @@ let find t id =
   match Map.find t.data kind with
   | None -> None
   | Some incs -> Map.find incs id
+
+let merge_name a a' =
+  if String.(a.name <> a'.name) then None
+  else Some a.name
+
+let merge_size a a' =
+  match a.size, a'.size with
+  | Some s, Some s' when Int.(s = s') -> Some s
+  | Some s, None | None, Some s -> Some s
+  | _ -> None
+
+let merge_time a a' =
+  Map.merge a.time a'.time ~f:(fun ~key:_ -> function
+      | `Left x | `Right x -> Some x
+      | `Both (x,y) when Int.(int_of_float x = int_of_float y) -> Some x
+      | _ -> None)
+
+let merge_status s s' = match s,s' with
+  | Undecided, x | x, Undecided -> Some x
+  | _ -> None
+
+let merge_data a a' =
+  Map.merge a.data a'.data ~f:(fun ~key:_ -> function
+      | `Left x | `Right x -> Some x
+      | `Both (x,y) ->
+        Option.some @@
+        Map.merge x y ~f:(fun ~key:_ -> function
+            | `Left x | `Right x -> Some x
+            | `Both ((i,s),(_,s')) ->
+              match merge_status s s' with
+              | Some s -> Some (i,s)
+              | None -> None))
+
+let merge a a' =
+  match merge_name a a' with
+  | None -> None
+  | Some name ->
+    let size = merge_size a a' in
+    let time = merge_time a a' in
+    let data = merge_data a a' in
+    Some {name; size; time; data}

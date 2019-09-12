@@ -1,41 +1,62 @@
-(wpa_supplicant-2.2 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
+# comments
+# Syntax:
+#  artiact1  recipe1 recipe2
+#  artifact2 recipe1 (recipe3 (param1 val) (param2 val2))
+#  artifact3 recipe4 (recipe3 param1=val param2=val2)
 
-(wpa_cli-2.2 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(wav2swf-0.9.2 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(tshark-2.6.0 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(swfextract-0.9.2 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(swfcombine-0.9.2 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(swfc-0.9.2 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(sshd-7.3.p1 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(sqlite3-2.27.2 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(smtpd-5.7.3p2 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(samba-4.7.6 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(openssl-1.1.0 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(ntpdc-4.2.8p5 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(ntpd-4.2.8p5 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(nginx-1.7 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(lighttpd-1.4.15 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(libbfd-2.31.1 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-(httpd-2.4.18 (forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4))
-
-(juliet-cwe-476 av-rule-174)
-(juliet-cwe-252 jpl-rule-14)
-
-(wpa_supplicant-2.2 (av-rule-174 jpl-rule-14))
-(wpa_cli-2.2 (av-rule-174 jpl-rule-14))
-(wav2swf-0.9.2 (av-rule-174 jpl-rule-14))
-(tshark-2.6.0 (av-rule-174 jpl-rule-14))
-(swfextract-0.9.2 (av-rule-174 jpl-rule-14))
-(swfcombine-0.9.2 (av-rule-174 jpl-rule-14))
-(swfc-0.9.2 (av-rule-174 jpl-rule-14))
-(sshd-7.3.p1 (av-rule-174 jpl-rule-14))
-(sqlite3-2.27.2 (av-rule-174 jpl-rule-14))
-(smtpd-5.7.3p2 (av-rule-174 jpl-rule-14))
-(samba-4.7.6 (av-rule-174 jpl-rule-14))
-(openssl-1.1.0 (av-rule-174 jpl-rule-14))
-(ntpdc-4.2.8p5 (av-rule-174 jpl-rule-14))
-(ntpd-4.2.8p5 (av-rule-174 jpl-rule-14))
-(nginx-1.7 (av-rule-174 jpl-rule-14))
-(lighttpd-1.4.15 (av-rule-174 jpl-rule-14))
-(libbfd-2.31.1 (av-rule-174 jpl-rule-14))
-(httpd-2.4.18 (av-rule-174 jpl-rule-14))
+wpa_supplicant-2.2 forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+wpa_cli-2.2        forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+wav2swf-0.9.2      forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+tshark-2.6.0       forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+swfextract-0.9.2   forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+swfcombine-0.9.2   forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+swfc-0.9.2         forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+sshd-7.3.p1        forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+sqlite3-2.27.2     forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+smtpd-5.7.3p2      forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+samba-4.7.6        forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+openssl-1.1.0      forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+ntpdc-4.2.8p5      forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+ntpd-4.2.8p5       forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+nginx-1.7          forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+lighttpd-1.4.15    forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+libbfd-2.31.1      forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+httpd-2.4.18       forbidden-symbol av-rule-3 jpl-rule-11 jpl-rule-4
+juliet-cwe-476     av-rule-174
+juliet-cwe-252     jpl-rule-14
+wpa_supplicant-2.2 av-rule-174 jpl-rule-14
+wpa_cli-2.2        av-rule-174 jpl-rule-14
+wav2swf-0.9.2      av-rule-174 jpl-rule-14
+tshark-2.6.0       av-rule-174 jpl-rule-14
+swfextract-0.9.2   av-rule-174 jpl-rule-14
+swfcombine-0.9.2   av-rule-174 jpl-rule-14
+swfc-0.9.2         av-rule-174 jpl-rule-14
+sshd-7.3.p1        av-rule-174 jpl-rule-14
+sqlite3-2.27.2     av-rule-174 jpl-rule-14
+smtpd-5.7.3p2      av-rule-174 jpl-rule-14
+samba-4.7.6        av-rule-174 jpl-rule-14
+openssl-1.1.0      av-rule-174 jpl-rule-14
+ntpdc-4.2.8p5      av-rule-174 jpl-rule-14
+ntpd-4.2.8p5       av-rule-174 jpl-rule-14
+nginx-1.7          av-rule-174 jpl-rule-14
+lighttpd-1.4.15    av-rule-174 jpl-rule-14
+libbfd-2.31.1      av-rule-174 jpl-rule-14
+httpd-2.4.18       av-rule-174 jpl-rule-14
+wpa_supplicant-2.2 primus-checks
+wpa_cli-2.2        primus-checks
+wav2swf-0.9.2      primus-checks
+tshark-2.6.0       primus-checks
+swfextract-0.9.2   primus-checks
+swfcombine-0.9.2   primus-checks
+swfc-0.9.2         primus-checks
+sshd-7.3.p1        primus-checks
+sqlite3-2.27.2     primus-checks
+smtpd-5.7.3p2      primus-checks
+samba-4.7.6        primus-checks
+openssl-1.1.0      primus-checks
+ntpdc-4.2.8p5      primus-checks
+ntpd-4.2.8p5       primus-checks
+nginx-1.7          primus-checks
+lighttpd-1.4.15    primus-checks
+libbfd-2.31.1      primus-checks
+httpd-2.4.18       primus-checks

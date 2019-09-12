@@ -15,11 +15,6 @@ let cmd fmt =
       None in
   ksprintf run fmt
 
-let with_tag ?tag image =
-  match tag with
-  | None -> image
-  | Some tag -> sprintf "%s:%s" image tag
-
 let split_string s =
   String.split_on_chars ~on:[' '; '\t'] s |>
   List.filter ~f:(fun s -> s <> "") |>

@@ -4,10 +4,12 @@ module Std = struct
   include Bap_report_types
   module Docker = Bap_report_docker
 
+  type image = Docker.Image.t
+
   module Recipe = Bap_report_recipe
-  module Tool = Bap_report_tool
+  module Job  = Recipe.Job
+
   type recipe = Recipe.t
-  type tool = Tool.t
 
   module Size = Bap_report_size
   module Read = Bap_report_read

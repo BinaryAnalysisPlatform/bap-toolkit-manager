@@ -1,16 +1,30 @@
 open Core_kernel
+open Bap_report_types
 
 type t
-type tool = Bap_report_tool.t
+type image = Bap_report_docker.image
+type recipe = t
 
-val find : tool -> string -> t option
+val find : image -> string -> t option
+val list : image -> t list
 
-val list : tool -> t list
+val add_parameter : t -> name:string -> value:string -> t
 
 val name : t -> string
 
 val description : t -> string
 
-val run : tool:tool -> ?image:string -> ?tag:string -> string -> t -> t
+val to_string : t -> string
 
-val time_taken : t -> float
+module Job : sig
+
+  type t
+
+  val run : recipe -> tool:image -> ?image:image -> string -> t
+  val time : t -> float
+
+  val results : t -> string
+
+  val incidents : t -> incident list
+
+end

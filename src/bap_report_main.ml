@@ -2,8 +2,14 @@ open Core_kernel
 open Bap_report.Std
 open Bap_report_options
 
+module Scheduled = Bap_report_scheduled
+
+
 module Bap_artifact = struct
-  let image = "binaryanalysisplatform/bap-artifacts"
+
+  let image = Docker.Image.of_string_exn "binaryanalysisplatform/bap-artifacts"
+
+  let with_tag tag = Docker.Image.with_tag image tag
 
   type kind =
     | Local
@@ -11,20 +17,23 @@ module Bap_artifact = struct
 
   let run_recipe tool a kind r =
     match kind with
-    | Local -> Recipe.run ~tool (Artifact.name a) r
-    | Image ->  Recipe.run ~tool ~image ~tag:(Artifact.name a) "/artifact" r
+    | Local -> Job.run r ~tool (Artifact.name a)
+    | Image ->
+      let image = with_tag (Artifact.name a) in
+      Job.run r ~tool ~image "/artifact"
 
   let can't_find tag reason =
     eprintf "can't find %s: %s\n" tag reason
 
   let artifact_exists tag =
-    match Docker.get_image ~tag image with
+    let image = with_tag tag in
+    match Docker.Image.get image with
     | Error er ->
       can't_find tag (Error.to_string_hum er);
       false
     | Ok () ->
       let cmd = sprintf "find / -type f -name /artifact" in
-      match Docker.run ~image ~tag cmd with
+      match Docker.run image cmd with
       | None | Some "" ->
         can't_find tag "no such file in image";
         false
@@ -42,7 +51,8 @@ module Bap_artifact = struct
       let size = Size.get name in
       Some (Local, Artifact.create ?size name)
     | Some Image ->
-      let size = Size.get ~image ~tag:name "/artifact" in
+      let image = with_tag name in
+      let size = Size.get ~image "/artifact" in
       Some (Image, Artifact.create ?size name)
 
 end
@@ -54,23 +64,23 @@ let check_diff xs ys =
       if List.mem ys c ~equal:check_equal then ac
       else c :: ac)
 
-module Render = struct
+module Runner = struct
 
   type t = {
-      view : View.t;
-      arts : (Bap_artifact.kind * artifact) String.Map.t;
-      outp : string;
-    }
+    view : View.t;
+    arts : (Bap_artifact.kind * artifact) String.Map.t;
+    outp : string;
+  }
 
   let create view output = {
-      view;
-      arts = Map.empty (module String);
-      outp = output;
-    }
+    view;
+    arts = Map.empty (module String);
+    outp = output;
+  }
 
   let update t (kind,arti) =
     {t with arts =
-      Map.set t.arts (Artifact.name arti) (kind,arti) }
+              Map.set t.arts (Artifact.name arti) (kind,arti) }
 
   let get t name = Map.find t.arts name
 
@@ -106,142 +116,121 @@ let confirm confirmations arti kinds =
   match Map.find confirmations (Artifact.name arti) with
   | None -> arti
   | Some confirmed ->
-     let checks = Artifact.checks arti in
-     Map.fold confirmed ~init:arti ~f:(fun ~key:id ~data:conf arti ->
-         let k = Confirmation.incident_kind conf in
-         if not (List.mem checks k ~equal:Incident.Kind.equal) then arti
-         else
-         match Artifact.find arti id with
-         | Some (inc,st) ->
+    let checks = Artifact.checks arti in
+    Map.fold confirmed ~init:arti ~f:(fun ~key:id ~data:conf arti ->
+        let k = Confirmation.incident_kind conf in
+        if not (List.mem checks k ~equal:Incident.Kind.equal) then arti
+        else
+          match Artifact.find arti id with
+          | Some (inc,st) ->
             let status = Confirmation.validate conf (Some st) in
             Artifact.update arti inc status
-         | None ->
+          | None ->
             match Confirmation.validate conf None with
             | False_neg as status ->
-               let inc = Incident.create
-                           (Confirmation.locations conf)
-                           (Confirmation.incident_kind conf)  in
-               Artifact.update arti inc  status
+              let inc = Incident.create
+                  (Confirmation.locations conf)
+                  (Confirmation.incident_kind conf)  in
+              Artifact.update arti inc  status
             | _ -> arti)
 
-
 let run_artifact tool confirmed arti kind recipe =
-  printf "running %s %s\n%!" (Artifact.name arti) (Recipe.name recipe);
+  printf "running %s %s\n%!" (Artifact.name arti) (Recipe.to_string recipe);
   let checks = Artifact.checks arti in
-  let recipe = Bap_artifact.run_recipe tool arti kind recipe in
-  let time = Recipe.time_taken recipe in
-  let incs = "incidents" in
-  if Sys.file_exists incs then
-    let incs = In_channel.with_file incs ~f:Read.incidents in
+  let job = Bap_artifact.run_recipe tool arti kind recipe in
+  match Job.incidents job with
+  | [] -> arti
+  | incs ->
     let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
     let checks = check_diff (Artifact.checks arti) checks in
-    let arti = update_time arti checks time  in
+    let arti = update_time arti checks (Job.time job)  in
     confirm confirmed arti checks
-  else arti
 
 let need_all names =
-  let names = List.map ~f:String.lowercase names in
-  List.mem names "all" ~equal:String.equal
+  let f {Scheduled.name} = String.lowercase name = "all" in
+  List.exists names ~f
 
 let recipes_of_names tool names =
   let recipes = Recipe.list tool in
+  let find name =
+    List.find recipes ~f:(fun r -> String.equal (Recipe.name r) name) in
   if need_all names then recipes
   else
-    List.filter recipes
-      ~f:(fun r -> List.mem names (Recipe.name r) ~equal:String.equal)
+    List.filter_map names
+      ~f:(fun {Scheduled.name;pars} ->
+          (match find name with
+           | None -> None
+           | Some r ->
+             List.fold pars ~init:r ~f:(fun r (name,value) ->
+                 Recipe.add_parameter r ~name ~value) |>
+             Option.some))
 
-let run tool render confirmed name recipes =
+let run tool runner confirmed name recipes =
   let recipes = recipes_of_names tool recipes in
-  match Render.get render name with
-  | None -> render
+  match Runner.get runner name with
+  | None -> runner
   | Some (kind,arti) ->
-    List.fold ~init:(render,arti) recipes ~f:(fun (render,arti) reci ->
+    List.fold ~init:(runner,arti) recipes ~f:(fun (runner,arti) reci ->
         let arti = run_artifact tool confirmed arti kind reci in
-        let render = Render.update render (kind,arti) in
-        Render.run render;
-        render,arti) |> fst
+        let runner = Runner.update runner (kind,arti) in
+        Runner.run runner;
+        runner,arti) |> fst
 
-let default_view = View.create ()
-
-let run_artifacts tool render confirmed artis recipes =
-  let render =
+let run_artifacts tool runner confirmed artis recipes =
+  let runner =
     List.fold artis
-      ~init:render ~f:(fun r name ->
+      ~init:runner ~f:(fun r name ->
           match Bap_artifact.find name with
           | None ->
             eprintf "didn't find artifact %s, skipping ... \n" name;
             r
-          | Some a -> Render.update r a) in
-  let render =
+          | Some a -> Runner.update r a) in
+  let runner =
     List.fold artis
-      ~init:render ~f:(fun render name ->
-        run tool render confirmed name recipes) in
-  Render.artifacts render
+      ~init:runner ~f:(fun runner name ->
+          run tool runner confirmed name recipes) in
+  Runner.artifacts runner
 
-
-let parse_path = function
-  | [Sexp.Atom x] -> Some x
-  | _ -> None
-
-let parse_actions = function
-  | [Sexp.Atom target; Sexp.List recipes] ->
-    let recipes = List.map recipes ~f:Sexp.to_string in
-    Some (target,recipes)
-  | [Sexp.Atom target; Sexp.Atom recipe] ->
-    Some (target,[recipe])
-  | _ -> None
-
-let read_schedule acc path =
-  let rec read acc = function
-    | [] -> acc
-    | Sexp.List data :: xs ->
-      let acc = match parse_actions data with
-        | None -> acc
-        | Some d -> d :: acc in
-      read acc xs
-    | _ :: xs -> read acc xs in
-  let sexps =
-    In_channel.with_file path ~f:Sexp.input_sexps in
-  read [] sexps |> List.rev
-
-let run_schedule tool render confirmed path =
-  let acts = read_schedule [] path  in
-  let render =
+let run_schedule tool runner confirmed path =
+  let acts = Scheduled.of_file path  in
+  let runner =
     List.fold acts
-      ~init:render ~f:(fun r (name,recipes) ->
-          match Bap_artifact.find name with
+      ~init:runner ~f:(fun r {Scheduled.artifact;} ->
+          match Bap_artifact.find artifact with
           | None -> r
-          | Some a -> Render.update r a) in
-  let render =
-  List.fold acts
-    ~init:render
-    ~f:(fun render (name,recipes) ->
-      run tool render confirmed name recipes) in
-  Render.artifacts render
+          | Some a -> Runner.update r a) in
+  let runner =
+    List.fold acts
+      ~init:runner
+      ~f:(fun runner s ->
+          run tool runner confirmed s.artifact s.recipes) in
+  Runner.artifacts runner
 
 let check_toolkit tool =
-  let tag = Tool.tag tool in
-  let image = Tool.name tool in
-  match Docker.get_image ?tag image with
-  | Ok () -> ()
-  | Error _ ->
-     eprintf "can't detect/pull bap-toolkit, exiting ... ";
-     exit 1
+  let (>>=) = Or_error.(>>=) in
+  match Docker.Image.(of_string tool >>= fun tool -> get tool >>= fun () -> Ok tool) with
+  | Ok tool -> tool
+  | Error er ->
+    eprintf "can't detect/pull toolkit: %s, exiting ... \n"
+      (Error.to_string_hum er);
+    exit 1
 
-let of_incidents_file render filename =
+let of_incidents_file confirmations runner filename =
+  let name = Filename.remove_extension filename in
   let incidents = In_channel.with_file filename ~f:Read.incidents in
-  let artifact = Artifact.create filename in
-  let artifact = List.fold incidents ~init:artifact ~f:(fun a i ->
-      Artifact.update a i Undecided) in
-  let x = Render.update render (Local, artifact) in
-  Render.run x
+  let artifact = Artifact.create name in
+  let artifact = List.fold incidents ~init:artifact
+      ~f:(fun a i -> Artifact.update a i Undecided) in
+  let artifact = confirm confirmations artifact (Artifact.checks artifact) in
+  let x = Runner.update runner (Local, artifact) in
+  Runner.run x
 
 module O = struct
 
   type t = {
     schedule  : string option;
     artifacts : string list;
-    recipes   : string list;
+    recipes   : Scheduled.requested_recipe list;
     confirms  : string option;
     output    : string;
     of_incs   : string option;
@@ -253,7 +242,8 @@ module O = struct
 
   } [@@deriving fields]
 
-  let create a b c d e f g h i j k = Fields.create a b c d e f g h i j k
+  let create a b recipes d e f g h i j k =
+    Fields.create a b (List.concat recipes) d e f g h i j k
 
 end
 
@@ -268,7 +258,7 @@ let print_recipes_and_exit tool =
   exit 0
 
 let print_artifacts_and_exit () =
-  let images = Docker.available_tags Bap_artifact.image in
+  let images = Docker.Image.tags Bap_artifact.image in
   List.iter images ~f:(fun tag -> printf "%s\n" tag);
   exit 0
 
@@ -277,42 +267,35 @@ let main o print_recipes print_artifacts =
   let save artis =
     match o.store with
     | None -> ()
-    | Some file -> Bap_report_dump.dump file artis in
-  let tool = match Tool.of_string o.tool with
-       | Ok tool -> tool
-       | Error er ->
-          eprintf "%s\n" @@ Error.to_string_hum er;
-          exit 1 in
-  check_toolkit tool;
+    | Some file -> Bap_report_io.dump file artis in
+  let tool = check_toolkit o.tool in
   if print_recipes   then print_recipes_and_exit tool;
   if print_artifacts then print_artifacts_and_exit ();
   let confirmed = match o.confirms with
     | None -> Map.empty (module String)
     | Some path -> read_confirmations path in
   let view = match o.view with
-    | None -> default_view
+    | None -> View.create ()
     | Some f -> View.of_file f in
-  let render = Render.create view o.output in
-  let render = match o.store, o.update with
+  let runner = Runner.create view o.output in
+  let runner = match o.store, o.update with
     | Some file, true ->
-       let artis = Bap_report_dump.read file in
-       List.fold artis ~init:render ~f:(fun r a -> Render.update r (Local,a))
-    | _ -> render in
+      let artis = Bap_report_io.read file in
+      List.fold artis ~init:runner ~f:(fun r a -> Runner.update r (Local,a))
+    | _ -> runner in
   match o.schedule, o.of_incs, o.of_db with
   | Some sch, _, _ ->
-     let artis = run_schedule tool render confirmed sch in
-     save artis
-  | _, Some file,_ -> of_incidents_file render file
+    let artis = run_schedule tool runner confirmed sch in
+    save artis
+  | _, Some file,_ -> of_incidents_file confirmed runner file
   | _,_, Some db ->
-     let artis = Bap_report_dump.read db in
-     let render = List.fold artis ~init:render ~f:(fun r a ->
-                      Render.update r (Local,a)) in
-     Render.run render
+    let artis = Bap_report_io.read db in
+    let runner = List.fold artis ~init:runner ~f:(fun r a ->
+        Runner.update r (Local,a)) in
+    Runner.run runner
   | _ ->
-     let artis = run_artifacts tool render confirmed
-                   o.artifacts o.recipes in
-     save artis
-
+    run_artifacts tool runner confirmed o.artifacts o.recipes |>
+    save
 
 open Cmdliner
 
@@ -328,14 +311,11 @@ let o =
         $view
         $store
         $update
-        $of_db)
+        $of_file)
 
 let _ = Term.eval (Term.(const main $o $list_recipes $list_artifacts), info)
 
 (*
 TODO: document everything
-TODO: install view file somewhere ?
-TODO: there is a bug when in infering a size of an artifact
-TODO: remove incidents file on exit
-TODO: find a way to limit time?
+TODO: install view file somewhere
 *)

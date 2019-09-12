@@ -1,6 +1,10 @@
 open Core_kernel
 open Bap_report_utils
 
+type image = string * string option
+
+
+
 module type A = sig
   val tags : string -> string list
   val image : string -> bool
@@ -12,15 +16,15 @@ module Net_available = struct
     match cmd "wget -q https://registry.hub.docker.com/v1/repositories/%s/tags -O -" image with
     | None -> []
     | Some s ->
-       let s = String.filter s ~f:(fun c -> c <> '"') in
-       let s = String.tr s ~target:'}' ~replacement:' ' in
-       let s = String.split ~on:' ' s in
-       fst @@
-         List.fold s ~init:([],false)
-           ~f:(fun (acc,remember) w ->
-             if remember then w :: acc, false
-             else if w = "name:" then acc,true
-             else acc,false)
+      let s = String.filter s ~f:(fun c -> c <> '"') in
+      let s = String.tr s ~target:'}' ~replacement:' ' in
+      let s = String.split ~on:' ' s in
+      fst @@
+      List.fold s ~init:([],false)
+        ~f:(fun (acc,remember) w ->
+            if remember then w :: acc, false
+            else if w = "name:" then acc,true
+            else acc,false)
 
   let image name =
     let name' =
@@ -30,12 +34,12 @@ module Net_available = struct
     match cmd "docker search %s" name' with
     | None -> false
     | Some s ->
-       match String.split ~on:'\n' s with
-       | _header :: names ->
-          let names = List.filter_map names
-                        ~f:(fun s -> split_string s |> List.hd) in
-          List.mem names name ~equal:String.equal
-       | _ -> false
+      match String.split ~on:'\n' s with
+      | _header :: names ->
+        let names = List.filter_map names
+            ~f:(fun s -> split_string s |> List.hd) in
+        List.mem names name ~equal:String.equal
+      | _ -> false
 
 end
 
@@ -45,17 +49,17 @@ module Loc_available = struct
     match cmd "docker images" with
     | None | Some "" -> []
     | Some r ->
-       match String.split ~on:'\n' r with
-       | [] | [_] -> []
-       | _header :: images ->
-          List.filter_map images ~f:(fun im ->
-              match split_string im with
-              | name :: tag :: _ ->
-                 let tag = match tag with
-                   | "<none>" -> None
-                   | tag -> Some tag in
-                 Some (name,tag)
-              | _ -> None)
+      match String.split ~on:'\n' r with
+      | [] | [_] -> []
+      | _header :: images ->
+        List.filter_map images ~f:(fun im ->
+            match split_string im with
+            | name :: tag :: _ ->
+              let tag = match tag with
+                | "<none>" -> None
+                | tag -> Some tag in
+              Some (name,tag)
+            | _ -> None)
 
   let tags image =
     List.fold (available ()) ~init:[] ~f:(fun acc (im,tag) ->
@@ -71,44 +75,74 @@ module Loc_available = struct
 end
 
 module Exists(A : A) = struct
-  let test ?tag name =
+  let test (name,tag) =
     match tag with
     | None -> A.image name
     | Some tag -> List.mem (A.tags name) tag ~equal:String.equal
 end
 
-let exists_locally ?tag image =
-  let module E = Exists(Loc_available) in
-  E.test ?tag image
+module Image = struct
 
-let exists_globaly ?tag image =
-  let module E = Exists(Net_available) in
-  E.test ?tag image
+  type t = image
 
-let available_tags image =
-  match Net_available.tags image with
-  | [] -> Loc_available.tags image
-  | tags -> tags
+  let check name  =
+    match String.split name ~on:':' with
+    | [name;tag] -> Ok (name, Some tag)
+    | [name] -> Ok (name, None)
+    | _ -> Or_error.errorf "can't infer image name from the %s" name
 
-let image_exists ?tag name =
-  exists_locally ?tag name || exists_globaly ?tag name
+  let of_string s =
+    let (>>=) = Or_error.(>>=) in
+    check s >>= fun (name,tag) ->
+    Ok (name,tag)
 
-let pull ?tag image =
-  let image = with_tag ?tag image in
-  cmd "docker pull %s" image |> ignore
+  let of_string_exn s =
+    match of_string s with
+    | Ok im -> im
+    | Error e -> raise (Invalid_argument (Error.to_string_hum e))
 
-let get_image ?tag name =
-  if exists_locally ?tag name then Ok ()
-  else
-    if exists_globaly ?tag name then
-      let () = pull ?tag name in
-      if exists_locally ?tag name then Ok ()
+  let to_string (name,tag) =
+    match tag with
+    | None -> name
+    | Some tag -> sprintf "%s:%s" name tag
+
+  let tag (_,tag) = tag
+  let name (name,_) = name
+
+  let with_tag (name,_) tag = name, Some tag
+
+  let exists_locally image =
+    let module E = Exists(Loc_available) in
+    E.test image
+
+  let exists_globaly image =
+    let module E = Exists(Net_available) in
+    E.test image
+
+  let exists image = exists_locally image || exists_globaly image
+
+  let tags (image,_) =
+    match Net_available.tags image with
+    | [] -> Loc_available.tags image
+    | tags -> tags
+
+  let pull image =
+    let image = to_string image in
+    cmd "docker pull %s" image |> ignore
+
+  let get image =
+    if exists_locally image then Ok ()
+    else
+    if exists_globaly image then
+      let () = pull image in
+      if exists_locally image then Ok ()
       else
-        Or_error.errorf "can't pull image %s" (with_tag ?tag name)
-    else Or_error.errorf "can't detect image %s" (with_tag ?tag name)
+        Or_error.errorf "can't pull image %s" (to_string image)
+    else Or_error.errorf "can't detect image %s" (to_string image)
+end
 
-let run ~image ?tag ?entry ?mount cmd' =
-  let image = with_tag ?tag image in
+let run ?entry ?mount image cmd' =
+  let image = Image.to_string  image in
   let mount = match mount with
     | None -> ""
     | Some (host,guest) -> sprintf "-v %s:%s" host guest in

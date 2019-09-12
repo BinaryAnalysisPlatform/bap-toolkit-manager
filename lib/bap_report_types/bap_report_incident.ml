@@ -37,9 +37,9 @@ type locations = Locations.t [@@deriving bin_io, compare, hash, sexp]
 module Id = struct
 
   type t = {
-      locs : locations;
-      kind : kind;
-    } [@@deriving bin_io, compare, hash, sexp]
+    locs : locations;
+    kind : kind;
+  } [@@deriving bin_io, compare, hash, sexp]
 
   let create kind locs = {kind;locs}
   let locations t = t.locs
@@ -60,8 +60,8 @@ end
 type id = Id.t [@@deriving bin_io, compare, hash, sexp]
 
 type t = {
-    id   : id;
-    path : string list;
+  id   : id;
+  path : string list;
 } [@@deriving bin_io, hash, sexp]
 
 

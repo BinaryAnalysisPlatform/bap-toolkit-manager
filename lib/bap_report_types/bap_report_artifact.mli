@@ -25,3 +25,5 @@ val with_time : t -> incident_kind -> float -> t
 val summary : t -> incident_kind -> stat
 
 val find : t -> incident_id -> (incident * status) option
+
+val merge : t -> t -> t option

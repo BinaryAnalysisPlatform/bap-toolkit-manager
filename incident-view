@@ -6,35 +6,35 @@
 #   - name
 #   - addr
 
-(alias unused-return-value  "Unused return value")
-(alias null-ptr-deref       "Null pointer dereference")
-(alias forbidden-function   "Forbidden function")
-(alias complex-function     "Complex functino")
-(alias non-structural-cfg   "Non structural CFG")
-(alias recursive-function   "Recursive function")
-(alias hardcoded-socket-address "Hardcoded socket address")
-(alias memcheck-double-release  "Memory check: double free")
-(alias memcheck-out-of-bound    "Memory check: out of bound")
-(alias memcheck-use-after-release "Memory check: use after free")
-(alias untrusted-argument "Untrusted argument")
-(alias value-was-used-before-check "Unchecked Return Value to NULL Pointer Dereference")
+alias unused-return-value  "Unused return value"
+alias null-ptr-deref       "Null pointer dereference"
+alias forbidden-function   "Forbidden function"
+alias complex-function     "Complex function"
+alias non-structural-cfg   "Non structural CFG"
+alias recursive-function   "Recursive function"
+alias hardcoded-socket-address "Hardcoded socket address"
+alias memcheck-double-release  "Memory check: double free"
+alias memcheck-out-of-bound    "Memory check: out of bound"
+alias memcheck-use-after-release "Memory check: use after free"
+alias untrusted-argument "Untrusted argument"
+alias value-was-used-before-check "Unchecked Return Value to NULL Pointer Dereference"
 
-(web unused-return-value  "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/jpl-rule-14/descr")
-(web null-ptr-deref  "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-174/descr")
-(web complex-function  "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-3/descr")
-(web non-structural-cfg "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-189/descr")
-(web recursive-function "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/jpl-rule-4/descr")
-(web memcheck-use-after-release "https://cwe.mitre.org/data/definitions/416.html")
-(web memcheck-double-release "https://cwe.mitre.org/data/definitions/415.html")
-(web forbidden-function "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/forbidden-symbol/descr")
-(web value-was-used-before-check https://cwe.mitre.org/data/definitions/690.html)
+web unused-return-value  "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/jpl-rule-14/descr"
+web null-ptr-deref  "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-174/descr"
+web complex-function  "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-3/descr"
+web non-structural-cfg "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/av-rule-189/descr"
+web recursive-function "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/jpl-rule-4/descr"
+web memcheck-use-after-release "https://cwe.mitre.org/data/definitions/416.html"
+web memcheck-double-release "https://cwe.mitre.org/data/definitions/415.html"
+web forbidden-function "https://raw.githubusercontent.com/BinaryAnalysisPlatform/bap-toolkit/master/forbidden-symbol/descr"
+web value-was-used-before-check https://cwe.mitre.org/data/definitions/690.html
 
-(tab unused-return-value (path 2) addr)
-(tab null-ptr-deref name addr)
-(tab complex-function name)
-(tab non-structural-cfg name)
-(tab recursive-function name)
-(tab memcheck-use-after-release name locations)
-(tab memcheck-double-release name locations
-(tab forbidden-function name)
-(tab memcheck-out-of-bound name locations)
+tab unused-return-value (path 1) addr
+tab null-ptr-deref name addr
+tab complex-function name
+tab non-structural-cfg name
+tab recursive-function name
+tab memcheck-use-after-release name locations
+tab memcheck-double-release name locations
+tab forbidden-function name
+tab memcheck-out-of-bound name locations

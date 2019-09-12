@@ -30,8 +30,8 @@ type incident_data =
 module Make(M : Monad.S) = struct
   module S =
     Monad.State.Make(struct
-        type nonrec t = t
-        end)(M)
+      type nonrec t = t
+    end)(M)
 
   open S.Syntax
 
@@ -66,18 +66,22 @@ module Make(M : Monad.S) = struct
 
   let last_n = 5
 
+
+  let string_of_addrs addrs =
+    String.concat ~sep:" " (List.map ~f:Addr.to_string addrs)
+
   let call name =
     S.get () >>= fun state ->
     machine >>~ fun m ->
     let calls,stack =
       match m.stack, m.prev_pc with
       | (pc,_) :: _,_ when pc = m.pc ->
-         (* to prevent adding lisp calls on the stack  *)
-         state.calls, m.stack
+        (* to prevent adding lisp calls on the stack  *)
+        state.calls, m.stack
       | stack, Some prev_pc ->
-         let last_few = name :: (List.take stack last_n |> List.map ~f:snd) in
-         Map.set state.calls ~key:prev_pc ~data:last_few,
-         (m.pc, name) :: stack
+        let last_few = name :: (List.take stack last_n |> List.map ~f:snd) in
+        Map.set state.calls ~key:prev_pc ~data:last_few,
+        (m.pc, name) :: stack
       | _ -> state.calls, m.stack in
     update_machine {m with stack} >>= fun () ->
     S.update (fun s -> {s with calls})
@@ -88,16 +92,16 @@ module Make(M : Monad.S) = struct
     let stack,calls =
       match m.stack with
       | (pc,name') :: stack' when name = name' ->
-         let calls =
-           if m.pc = pc then
-             (*  for lisp calls, want be sure it is in calls:
-                 i.e. there wasn't pc-change event between
-                 call  and call-return, therefore the
-                 correct address of the can be infered like that *)
-             let last_few = name :: (List.take stack' last_n |> List.map ~f:snd) in
-             Map.set s.calls ~key:pc ~data:last_few
-           else s.calls in
-         stack', calls
+        let calls =
+          if m.pc = pc then
+            (*  for lisp calls, want be sure it is in calls:
+                i.e. there wasn't pc-change event between
+                call  and call-return, therefore the
+                correct address of the can be infered like that *)
+            let last_few = name :: (List.take stack' last_n |> List.map ~f:snd) in
+            Map.set s.calls ~key:pc ~data:last_few
+          else s.calls in
+        stack', calls
       | _ -> m.stack, s.calls in
     update_machine {m with stack} >>= fun () ->
     S.update (fun s -> {s with calls})
@@ -106,45 +110,50 @@ module Make(M : Monad.S) = struct
      since there are different incidents types, and it's not so
      easy to make a uniform solution for all of them. so there will be
      the next approach:
-       - check if there is a stored stack state in the {calls} map
+     - check if there is a stored stack state in the {calls} map
          for incident address
          (e.g. for incidents whose subject is a function call, like cwe-252)
-       - otherwise just take last few from the current stack
-       - otherwise try to find a symbol by address of the incidents  *)
+     - otherwise just take last few from the current stack
+     - otherwise try to find a symbol by address of the incidents  *)
   let path addr =
     let from_syms s =
       match Map.find s.syms addr with
       | None -> !! []
       | Some s -> !! [s] in
     let from_calls s =
-      !! (List.rev @@ Option.value ~default:[] (Map.find s.calls addr)) in
+      !! (Option.value ~default:[] (Map.find s.calls addr)) in
     let from_stack =
       machine >>= fun m ->
       match m with
       | None -> !! []
       | Some m ->
-         !! (List.take m.stack last_n |> List.map ~f:snd) in
+        !! (List.take m.stack last_n |> List.map ~f:snd) in
     S.get () >>= fun s ->
     let order = [from_calls s; from_stack; from_syms s] in
     S.List.find_map order ~f:(fun f ->
         f >>= function
         | [] -> !! None
         | x -> !! (Some x)) >>= function
-  | None -> !! []
-  | Some x -> !! x
+    | None -> !! []
+    | Some x -> !! x
 
+  let locs_to_str locs =
+    String.concat ~sep:" " @@
+    List.map locs  ~f:Addr.to_string
 
   let incident kind locs =
     let location_addr hist id = Option.(Map.find hist id >>= List.hd) in
-       S.get () >>= fun s ->
-       machine >>= fun m ->
-       match List.filter_map locs ~f:(location_addr s.hist) with
-       | [] -> !! ()
-       | addr :: prev ->
-          path addr >>= fun path ->
-          let locs = Locations.create ~prev addr in
-          let inc = Incident.create ~path locs kind in
-          S.update (fun s -> {s with incs = inc :: s.incs})
+    S.get () >>= fun s ->
+    machine >>= fun m ->
+    match List.filter_map locs ~f:(location_addr s.hist) with
+    | [] ->
+      eprintf "WARNING! missed incident!\n";
+      !! ()
+    | addr :: prev ->
+      path addr >>= fun path ->
+      let locs = Locations.create ~prev addr in
+      let inc = Incident.create ~path locs kind in
+      S.update (fun s -> {s with incs = inc :: s.incs})
 
   let incident_location (id,addrs) =
     S.update (fun s -> {s with hist = Map.set s.hist ~key:id ~data:addrs})
@@ -194,9 +203,9 @@ module Main = Make(Monad.Ident)
 
 let read ch =
   let fresh = {cur = None;
-               hist=Map.empty (module Location_id);
+               hist =Map.empty (module Location_id);
                calls=Map.empty (module Addr);
-               syms=Map.empty (module Addr);
+               syms =Map.empty (module Addr);
                machs=Map.empty (module Machine_id);
                incs=[]} in
   let results = Monad.State.exec (Main.run ch) fresh in
