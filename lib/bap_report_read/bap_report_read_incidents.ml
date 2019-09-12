@@ -79,8 +79,15 @@ module Make(M : Monad.S) = struct
         (* to prevent adding lisp calls on the stack  *)
         state.calls, m.stack
       | stack, Some prev_pc ->
+         (* to prevent data rewriting when we have a tail call, e.g.
+            call memset
+            call sub_deadbeaf with no return *)
+        let pc =
+          match Map.find state.calls prev_pc with
+          | Some _ -> m.pc
+          | None  -> prev_pc in
         let last_few = name :: (List.take stack last_n |> List.map ~f:snd) in
-        Map.set state.calls ~key:prev_pc ~data:last_few,
+        Map.set state.calls ~key:pc ~data:last_few,
         (m.pc, name) :: stack
       | _ -> state.calls, m.stack in
     update_machine {m with stack} >>= fun () ->
