@@ -104,14 +104,19 @@ module Std : sig
   module Job : sig
 
     module Limit : sig
-      type quantity = [ `S | `M | `H ]
+      type quantity = [
+        | `S  (** seconds  *)
+        | `M  (** minutes *)
+        | `H  (** hours *)
+        | `Mb (** megabytes *)
+        | `Gb (** gigabytes *)
+      ]
+
       type t
 
       val empty : t
 
-      (** [by_time nums quantity] adds time limit,
-           where [num] is a number of seconds,minutes or
-           hours *)
+      (** [add num quantity] adds a new limit *)
       val add  : t -> int -> quantity -> t
 
       val quantity_of_string : string -> quantity option

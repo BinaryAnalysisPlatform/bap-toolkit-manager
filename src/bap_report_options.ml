@@ -166,10 +166,16 @@ let of_file =
   let doc = "create a report from previously stored data" in
   Arg.(value & opt (some string) None & info ["file"; "-f"] ~doc)
 
-let time_limit =
-  let doc = "limit a time per every check.
-             Examples:
-             10s - 10 seconds
-             10m - 10 minutes
-             10h - 10 hours" in
-  Arg.(value & opt (some Limit_arg.conv) None & info ["time-limit"; ] ~doc)
+let limits =
+  let doc =
+    "Set a limit per recipe. If a running recipe requires more it will
+    be canceled.
+             Possible limitations
+             time:
+               10s - 10 seconds
+               10m - 10 minutes
+               10h - 10 hours
+             memory:
+               10Mb - 10 Megabytes
+               10Gb - 10 Gigabytes" in
+  Arg.(value & opt_all Limit_arg.conv [] & info ["limit"; ] ~doc)

@@ -18,7 +18,7 @@ val to_string : t -> string
 
 module Job : sig
   module Limit : sig
-    type quantity = [ `S | `M | `H ]
+    type quantity = [ `S | `M | `H | `Mb | `Gb ]
     type t
 
     val empty : t

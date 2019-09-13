@@ -69,7 +69,7 @@ module Job = struct
   module Limit = struct
     type mem_quantity  = [ `Mb | `Gb ]
     type time_quantity = [ `S | `M | `H ]
-    type quantity = time_quantity
+    type quantity = [ time_quantity | mem_quantity ]
 
     type time = int * time_quantity
     type mem  = int * mem_quantity
@@ -85,28 +85,48 @@ module Job = struct
       | "s" -> Some `S
       | "m" -> Some `M
       | "h" -> Some `H
+      | "Mb" -> Some `Mb
+      | "Gb" -> Some `Gb
       | _ -> None
 
     let string_of_quantity = function
       | `S -> "s"
       | `M -> "m"
       | `H -> "h"
+      | `Mb -> "Mb"
+      | `Gb -> "Gb"
+
 
     let add t num quantity  =
       match quantity with
-      (* | `Mb | `Gb as quantity -> {t with mem  = Some (num,quantity)} *)
+      | `Mb | `Gb as quantity -> {t with mem  = Some (num,quantity)}
       | `S | `M | `H  as quantity -> {t with time  = Some (num,quantity)}
 
     let time t = t.time
     let memory t = t.mem
 
     let string_of_time (n,quantity) =
-      let suf = match quantity with
-        | `S -> "s"
-        | `M -> "m"
-        | `H -> "h" in
-      sprintf "%d%s" n suf
+      let n = match quantity with
+        | `S -> n
+        | `M -> n * 60
+        | `H -> n * 60 * 60 in
+      sprintf "-t %d" n
 
+    let string_of_mem (n,quantity) =
+      let n = match quantity with
+        | `Mb -> 1024 * n
+        | `Gb -> 1024 * 1024 * n in
+      sprintf "-v %d" n
+
+    let ulimit t =
+      let map ~f =
+        Option.value_map ~default:None ~f:(fun x -> Some (f x)) in
+      let time = map ~f:string_of_time t.time in
+      let mem  = map ~f:string_of_mem t.mem in
+      match List.filter_map ~f:ident [time;mem] with
+      | [] -> None
+      | args ->
+         Some (sprintf "ulimit %s" @@ String.concat ~sep:" " args)
 
   end
 
@@ -123,15 +143,15 @@ module Job = struct
 
   let script dir target recipe limit =
     let recipe = to_string recipe in
-    let timing = match Limit.time limit with
+    let ulimit = match Limit.ulimit limit with
       | None -> ""
-      | Some time ->
-         sprintf "timeout %s" (Limit.string_of_time time) in
+      | Some cmd -> cmd in
     [ "#!/usr/bin/env sh\n";
       sprintf "cd %s" drive;
       sprintf "mkdir %s" dir;
       sprintf "cd %s" dir;
-      sprintf "%s bap %s/%s --recipe=%s -d -dasm > bap.stdout" timing drive target recipe;
+      sprintf "%s" ulimit;
+      sprintf "bap %s/%s --recipe=%s -d -dasm > bap.stdout" drive target recipe;
       "cd ../";
       sprintf "tar czf %s.tgz %s" dir dir;
       sprintf "rm -r %s" dir

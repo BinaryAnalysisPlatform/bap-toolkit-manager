@@ -248,8 +248,7 @@ module O = struct
   } [@@deriving fields]
 
   let create a b recipes d e f g h i j k l =
-    Fields.create a b (List.concat recipes) d e f g h i j k
-      (List.filter_map ~f:ident [l])
+    Fields.create a b (List.concat recipes) d e f g h i j k l
 
 end
 
@@ -322,7 +321,7 @@ let o =
         $store
         $update
         $of_file
-        $time_limit)
+        $limits)
 
 let _ = Term.eval (Term.(const main $o $list_recipes $list_artifacts), info)
 
