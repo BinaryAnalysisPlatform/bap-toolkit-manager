@@ -127,11 +127,11 @@ module Std : sig
     type t
     type limit = Limit.t
 
-    (** [run t ~tool ~image ~limit path ] runs the recipe.
-      [tool] is an image responsible for running the recipe.
-      if [image] is set then [path] is considered
-      relatively to the [image], else to the host filesystem.
-      returns a time that was spent to process the recipe. *)
+    (** [run recipe ~tool ~image ~limit path ] runs the recipe.
+        [tool] is an image responsible for running the recipe.
+        if [image] is set then [path] is considered
+        relatively to the [image], else to the host filesystem.
+        returns a time that was spent to process the recipe. *)
     val run : recipe -> tool:image -> ?image:image -> ?limit:limit -> string -> t
 
     (** [time job] returns time  in seconds spent for the job [t] *)

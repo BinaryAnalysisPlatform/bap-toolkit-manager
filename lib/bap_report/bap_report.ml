@@ -7,7 +7,7 @@ module Std = struct
   type image = Docker.Image.t
 
   module Recipe = Bap_report_recipe
-  module Job  = Recipe.Job
+  module Job  = Bap_report_job
 
   type recipe = Recipe.t
 
