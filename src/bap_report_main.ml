@@ -15,12 +15,12 @@ module Bap_artifact = struct
     | Local
     | Image
 
-  let run_recipe tool a kind r =
+  let run_recipe tool arti kind limit r =
     match kind with
-    | Local -> Job.run r ~tool (Artifact.name a)
+    | Local -> Job.run r ~tool ~limit (Artifact.name arti)
     | Image ->
-      let image = with_tag (Artifact.name a) in
-      Job.run r ~tool ~image "/artifact"
+      let image = with_tag (Artifact.name arti) in
+      Job.run r ~tool ~image ~limit "/artifact"
 
   let can't_find tag reason =
     eprintf "can't find %s: %s\n" tag reason
@@ -134,10 +134,15 @@ let confirm confirmations arti kinds =
               Artifact.update arti inc  status
             | _ -> arti)
 
-let run_artifact tool confirmed arti kind recipe =
+let print_bap_version tool =
+  match Docker.run tool "--version" with
+  | None -> ()
+  | Some str -> printf "bap version: %s" str
+
+let run_artifact tool confirmed arti kind recipe limit =
   printf "running %s %s\n%!" (Artifact.name arti) (Recipe.to_string recipe);
   let checks = Artifact.checks arti in
-  let job = Bap_artifact.run_recipe tool arti kind recipe in
+  let job = Bap_artifact.run_recipe tool arti kind limit recipe in
   match Job.incidents job with
   | [] -> arti
   | incs ->
@@ -165,18 +170,18 @@ let recipes_of_names tool names =
                  Recipe.add_parameter r ~name ~value) |>
              Option.some))
 
-let run tool runner confirmed name recipes =
+let run tool runner confirmed name recipes limit =
   let recipes = recipes_of_names tool recipes in
   match Runner.get runner name with
   | None -> runner
   | Some (kind,arti) ->
     List.fold ~init:(runner,arti) recipes ~f:(fun (runner,arti) reci ->
-        let arti = run_artifact tool confirmed arti kind reci in
+        let arti = run_artifact tool confirmed arti kind reci limit in
         let runner = Runner.update runner (kind,arti) in
         Runner.run runner;
         runner,arti) |> fst
 
-let run_artifacts tool runner confirmed artis recipes =
+let run_artifacts tool runner confirmed artis recipes limit =
   let runner =
     List.fold artis
       ~init:runner ~f:(fun r name ->
@@ -188,10 +193,10 @@ let run_artifacts tool runner confirmed artis recipes =
   let runner =
     List.fold artis
       ~init:runner ~f:(fun runner name ->
-          run tool runner confirmed name recipes) in
+          run tool runner confirmed name recipes limit) in
   Runner.artifacts runner
 
-let run_schedule tool runner confirmed path =
+let run_schedule tool runner confirmed path limit =
   let acts = Scheduled.of_file path  in
   let runner =
     List.fold acts
@@ -203,7 +208,7 @@ let run_schedule tool runner confirmed path =
     List.fold acts
       ~init:runner
       ~f:(fun runner s ->
-          run tool runner confirmed s.artifact s.recipes) in
+          run tool runner confirmed s.artifact s.recipes limit) in
   Runner.artifacts runner
 
 let check_toolkit tool =
@@ -228,22 +233,23 @@ let of_incidents_file confirmations runner filename =
 module O = struct
 
   type t = {
-    schedule  : string option;
-    artifacts : string list;
-    recipes   : Scheduled.requested_recipe list;
-    confirms  : string option;
-    output    : string;
-    of_incs   : string option;
-    tool      : string;
-    view      : string option;
-    store     : string option;
-    update    : bool;
-    of_db     : string option;
-
+    schedule   : string option;
+    artifacts  : string list;
+    recipes    : Scheduled.requested_recipe list;
+    confirms   : string option;
+    output     : string;
+    of_incs    : string option;
+    tool       : string;
+    view       : string option;
+    store      : string option;
+    update     : bool;
+    of_db      : string option;
+    limits     : (int * Job.Limit.quantity) list;
   } [@@deriving fields]
 
-  let create a b recipes d e f g h i j k =
+  let create a b recipes d e f g h i j k l =
     Fields.create a b (List.concat recipes) d e f g h i j k
+      (List.filter_map ~f:ident [l])
 
 end
 
@@ -283,9 +289,12 @@ let main o print_recipes print_artifacts =
       let artis = Bap_report_io.read file in
       List.fold artis ~init:runner ~f:(fun r a -> Runner.update r (Local,a))
     | _ -> runner in
+  let limit = List.fold o.limits
+                ~init:Job.Limit.empty ~f:(fun l (n,q) -> Job.Limit.add l n q) in
   match o.schedule, o.of_incs, o.of_db with
   | Some sch, _, _ ->
-    let artis = run_schedule tool runner confirmed sch in
+    print_bap_version tool;
+    let artis = run_schedule tool runner confirmed sch limit in
     save artis
   | _, Some file,_ -> of_incidents_file confirmed runner file
   | _,_, Some db ->
@@ -294,7 +303,8 @@ let main o print_recipes print_artifacts =
         Runner.update r (Local,a)) in
     Runner.run runner
   | _ ->
-    run_artifacts tool runner confirmed o.artifacts o.recipes |>
+    print_bap_version tool;
+    run_artifacts tool runner confirmed o.artifacts o.recipes limit |>
     save
 
 open Cmdliner
@@ -311,7 +321,8 @@ let o =
         $view
         $store
         $update
-        $of_file)
+        $of_file
+        $time_limit)
 
 let _ = Term.eval (Term.(const main $o $list_recipes $list_artifacts), info)
 

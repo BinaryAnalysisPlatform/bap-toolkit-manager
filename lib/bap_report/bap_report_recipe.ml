@@ -66,6 +66,53 @@ let to_string recipe = match recipe.args with
 
 module Job = struct
 
+  module Limit = struct
+    type mem_quantity  = [ `Mb | `Gb ]
+    type time_quantity = [ `S | `M | `H ]
+    type quantity = time_quantity
+
+    type time = int * time_quantity
+    type mem  = int * mem_quantity
+
+    type t = {
+        time : time option;
+        mem  : mem option
+    }
+
+    let empty = {time = None; mem = None}
+
+    let quantity_of_string = function
+      | "s" -> Some `S
+      | "m" -> Some `M
+      | "h" -> Some `H
+      | _ -> None
+
+    let string_of_quantity = function
+      | `S -> "s"
+      | `M -> "m"
+      | `H -> "h"
+
+    let add t num quantity  =
+      match quantity with
+      (* | `Mb | `Gb as quantity -> {t with mem  = Some (num,quantity)} *)
+      | `S | `M | `H  as quantity -> {t with time  = Some (num,quantity)}
+
+    let time t = t.time
+    let memory t = t.mem
+
+    let string_of_time (n,quantity) =
+      let suf = match quantity with
+        | `S -> "s"
+        | `M -> "m"
+        | `H -> "h" in
+      sprintf "%d%s" n suf
+
+
+  end
+
+  type limit = Limit.t
+
+
   type t = {
     file : string;
     time : float;
@@ -74,20 +121,24 @@ module Job = struct
   let time t = t.time
   let results t = t.file
 
-  let script dir target recipe =
+  let script dir target recipe limit =
     let recipe = to_string recipe in
+    let timing = match Limit.time limit with
+      | None -> ""
+      | Some time ->
+         sprintf "timeout %s" (Limit.string_of_time time) in
     [ "#!/usr/bin/env sh\n";
       sprintf "cd %s" drive;
       sprintf "mkdir %s" dir;
       sprintf "cd %s" dir;
-      sprintf "bap %s/%s --recipe=%s -d -dasm > bap.stdout" drive target recipe;
+      sprintf "%s bap %s/%s --recipe=%s -d -dasm > bap.stdout" timing drive target recipe;
       "cd ../";
       sprintf "tar czf %s.tgz %s" dir dir;
       sprintf "rm -r %s" dir
     ] |> String.concat ~sep:"\n"
 
-  let entry workdir target recipe =
-    let s = script workdir target recipe in
+  let entry workdir target recipe limit =
+    let s = script workdir target recipe limit in
     let tmp = Filename.temp_file ~temp_dir:(pwd ()) "script" "" in
     Out_channel.with_file tmp ~f:(fun c -> Out_channel.output_lines c [s]);
     Unix.chmod tmp 0o777;
@@ -110,11 +161,11 @@ module Job = struct
         sprintf "%s.%s" (Docker.Image.to_string im) recipe
       | Some tag -> sprintf "%s.%s" tag recipe
 
-  let run t ~tool ?image path =
+  let run t ~tool ?image ?(limit=Limit.empty) path =
     let alias = Filename.temp_file ~temp_dir:(pwd ()) "artifact" "" in
     copy_target ?image ~path (Filename.basename alias);
     let workdir = workdir ?image path t.name in
-    let entry = entry workdir (Filename.basename alias) t in
+    let entry = entry workdir (Filename.basename alias) t limit in
     let start = Unix.gettimeofday () in
     let _ = Docker.run tool ~mount:(pwd (), drive)
         ~entry:(sprintf "%s/%s" drive @@ Filename.basename entry) "" in

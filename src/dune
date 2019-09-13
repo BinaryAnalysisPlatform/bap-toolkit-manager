@@ -5,6 +5,7 @@
         bap_report
         bin_prot
         cmdliner
+        str
         core_kernel
         threads.posix)
    (preprocess (pps ppx_jane)))

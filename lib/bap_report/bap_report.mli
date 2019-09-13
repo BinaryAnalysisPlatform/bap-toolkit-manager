@@ -102,14 +102,32 @@ module Std : sig
   end
 
   module Job : sig
-    type t
 
-    (** [run t ~tool ~image path ] runs the recipe.
+    module Limit : sig
+      type quantity = [ `S | `M | `H ]
+      type t
+
+      val empty : t
+
+      (** [by_time nums quantity] adds time limit,
+           where [num] is a number of seconds,minutes or
+           hours *)
+      val add  : t -> int -> quantity -> t
+
+      val quantity_of_string : string -> quantity option
+      val string_of_quantity : quantity -> string
+
+    end
+
+    type t
+    type limit = Limit.t
+
+    (** [run t ~tool ~image ~limit path ] runs the recipe.
       [tool] is an image responsible for running the recipe.
       if [image] is set then [path] is considered
       relatively to the [image], else to the host filesystem.
       returns a time that was spent to process the recipe. *)
-    val run : recipe -> tool:image -> ?image:image -> string -> t
+    val run : recipe -> tool:image -> ?image:image -> ?limit:limit -> string -> t
 
     (** [time job] returns time  in seconds spent for the job [t] *)
     val time : t -> float

@@ -37,6 +37,38 @@ module Recipes = struct
 
 end
 
+module Limit_arg = struct
+  open Job.Limit
+
+  type t = int * quantity
+
+  let printer fmt (n, q) =
+    Format.fprintf fmt "%d %s" n (string_of_quantity q)
+
+  let chop_suffix str suf = match suf with
+    | None -> Some str
+    | Some suffix -> String.chop_suffix str ~suffix
+
+  let nums = Str.regexp "[0-9]+"
+
+  let parser s =
+    let error =
+      `Error (sprintf  "string '%s' doesn't fit to limit format" s) in
+    if Str.string_match nums s 0 then
+      if Str.match_beginning () = 0 then
+        let num = Str.matched_string s in
+        match String.chop_prefix ~prefix:num s with
+        | None | Some "" -> error
+        | Some suf ->
+           match quantity_of_string suf with
+           | Some q -> `Ok (int_of_string num,q)
+           | None -> error
+      else error
+    else error
+
+  let conv : t Arg.conv = parser,printer
+end
+
 
 let doc = "Bap toolkit"
 
@@ -133,3 +165,11 @@ let update =
 let of_file =
   let doc = "create a report from previously stored data" in
   Arg.(value & opt (some string) None & info ["file"; "-f"] ~doc)
+
+let time_limit =
+  let doc = "limit a time per every check.
+             Examples:
+             10s - 10 seconds
+             10m - 10 minutes
+             10h - 10 hours" in
+  Arg.(value & opt (some Limit_arg.conv) None & info ["time-limit"; ] ~doc)
