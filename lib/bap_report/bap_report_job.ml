@@ -1,5 +1,7 @@
 open Core_kernel
 open Bap_report_utils
+open Bap_report_types
+open Bap_report_read
 
 module Docker = Bap_report_docker
 module Recipe = Bap_report_recipe
@@ -7,8 +9,10 @@ module Recipe = Bap_report_recipe
 type recipe = Bap_report_recipe.t
 type image = Bap_report_docker.image
 
+
 let drive = "/mydrive"
 let pwd = Sys.getcwd
+let mytime = "mytime"
 
 module Limit = struct
   type mem_quantity  = [ `Mb | `Gb ]
@@ -71,19 +75,18 @@ module Limit = struct
     | [] -> None
     | args ->
       Some (sprintf "ulimit %s" @@ String.concat ~sep:" " args)
-
 end
 
 type limit = Limit.t
 
 
 type t = {
-  file : string;
+  incidents : incident list;
   time : float;
+  errors : string list list;
 }
 
 let time t = t.time
-let results t = t.file
 
 let script dir target recipe limit =
   let recipe = Recipe.to_string recipe in
@@ -95,7 +98,8 @@ let script dir target recipe limit =
     sprintf "mkdir %s" dir;
     sprintf "cd %s" dir;
     sprintf "%s" ulimit;
-    sprintf "bap %s/%s --recipe=%s -d -dasm > bap.stdout" drive target recipe;
+    sprintf
+      "/usr/bin/time -v -o %s bap %s/%s --recipe=%s -d -dasm > bap.stdout" mytime drive target recipe;
     "cd ../";
     sprintf "tar czf %s.tgz %s" dir dir;
     sprintf "rm -r %s" dir
@@ -125,6 +129,33 @@ let workdir ?image path recipe =
       sprintf "%s.%s" (Docker.Image.to_string im) recipe
     | Some tag -> sprintf "%s.%s" tag recipe
 
+let read_tar ?target_dir target_file tar read =
+  if Sys.file_exists tar then
+    let dir = Filename.remove_extension tar in
+    let path = match target_dir with
+      | None -> sprintf "%s/%s" dir target_file
+      | Some dir' -> sprintf "%s/%s/%s" dir dir' target_file in
+    let _ = cmd "tar xzf %s %s" tar path in
+    if Sys.file_exists path then
+      let r = read path in
+      Sys.remove path;
+      Option.iter target_dir ~f:(fun dir' -> Unix.rmdir (sprintf "%s/%s" dir dir'));
+      Unix.rmdir dir;
+      r
+    else None
+  else None
+
+let read_incidents file =
+  let read f = Some (In_channel.with_file f ~f:Bap_report_read.incidents) in
+  match read_tar "incidents" file read with
+  | None -> []
+  | Some incs -> incs
+
+let read_log file =
+  read_tar ~target_dir:"log" "log" file Bap_log.of_file |> function
+  | Some log -> Bap_log.errors log
+  | None -> []
+
 let run recipe ~tool ?image ?(limit=Limit.empty) path =
   let alias = Filename.temp_file ~temp_dir:(pwd ()) "artifact" "" in
   copy_target ?image ~path (Filename.basename alias);
@@ -136,15 +167,10 @@ let run recipe ~tool ?image ?(limit=Limit.empty) path =
   let finish = Unix.gettimeofday () in
   Sys.remove alias;
   Sys.remove entry;
-  { file=workdir ^ ".tgz"; time = finish -. start }
+  let file = workdir ^ ".tgz" in
+  let incidents = read_incidents file in
+  let errors = read_log file in
+  { incidents; time = finish -. start; errors }
 
-let incidents {file} =
-  let dir = Filename.remove_extension file in
-  let incs_file = sprintf "%s/incidents" dir in
-  let _ = cmd "tar xzf %s %s" file incs_file in
-  if Sys.file_exists incs_file then
-    let incs = In_channel.with_file incs_file ~f:Bap_report_read.incidents in
-    Sys.remove incs_file;
-    Unix.rmdir dir;
-    incs
-  else []
+let incidents t = t.incidents
+let errors t = t.errors

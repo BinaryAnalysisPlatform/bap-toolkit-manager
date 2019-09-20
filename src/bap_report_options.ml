@@ -164,7 +164,7 @@ let update =
 
 let of_file =
   let doc = "create a report from previously stored data" in
-  Arg.(value & opt (some string) None & info ["file"; "-f"] ~doc)
+  Arg.(value & opt (some string) None & info ["from"; "-f"] ~doc)
 
 let limits =
   let doc =

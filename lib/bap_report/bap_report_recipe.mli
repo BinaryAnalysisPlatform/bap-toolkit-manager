@@ -15,7 +15,3 @@ val name : t -> string
 val description : t -> string
 
 val to_string : t -> string
-
-module Job : sig
-
-end

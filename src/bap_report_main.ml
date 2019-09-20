@@ -139,10 +139,17 @@ let print_bap_version tool =
   | None -> ()
   | Some str -> printf "bap version: %s" str
 
+let print_errors job =
+  List.iter (Job.errors job)
+    ~f:(fun errs ->
+      List.iter errs ~f:(eprintf "%s\n");
+      eprintf "\n")
+
 let run_artifact tool confirmed arti kind recipe limit =
   printf "running %s %s\n%!" (Artifact.name arti) (Recipe.to_string recipe);
   let checks = Artifact.checks arti in
   let job = Bap_artifact.run_recipe tool arti kind limit recipe in
+  print_errors job;
   match Job.incidents job with
   | [] -> arti
   | incs ->

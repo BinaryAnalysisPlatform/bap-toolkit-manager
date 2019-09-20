@@ -137,12 +137,13 @@ module Std : sig
     (** [time job] returns time  in seconds spent for the job [t] *)
     val time : t -> float
 
-    (** [results t] returns a name of arhive where all the results
-        were saved: incidents, log, output etc *)
-    val results : t -> string
-
     (** [incidents t] returns a list of incidents *)
     val incidents : t -> incident list
+
+    (** [errors t] returns a list of errors from the log.
+        Each error is represented by list of messages (strings)
+        that describe error, e.g. backtrace, OCaml error messages etc*)
+    val errors : t -> string list list
 
   end
 
@@ -377,7 +378,6 @@ module Std : sig
       val lines :  ?comments:string -> In_channel.t -> string list
 
     end
-
   end
 
   module Template : sig
