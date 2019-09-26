@@ -93,7 +93,7 @@ let man = [
 
 ]
 
-let info = Term.info ~man ~doc "bap-tookit"
+let info = Term.info ~version:"dev" ~man ~doc "bap-tookit"
 
 let schedule =
   let doc = "creates a schedule of artifacts and recipes to run

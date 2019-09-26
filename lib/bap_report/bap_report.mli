@@ -141,7 +141,7 @@ module Std : sig
     val incidents : t -> incident list
 
     (** [errors t] returns a list of errors from the log.
-        Each error is represented by list of messages (strings)
+        Each error is represented by a list of messages (strings)
         that describe error, e.g. backtrace, OCaml error messages etc*)
     val errors : t -> string list list
 
@@ -284,7 +284,7 @@ module Std : sig
   end
 
 
-  (** Confirmation is a expected incident and it could be
+  (** Confirmation is an expected incident and it could be
       either of two kinds:
 
     - must - such one which MUST come up during the analysis

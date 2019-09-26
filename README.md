@@ -4,11 +4,9 @@
 `bap-toolkit` provides an easy way to run `bap` against variety of artifacts and analysis.
 Underneath of the hood `bap-toolkit` is an extra layer for docker containers, so there is no
 need to install `bap` manually or to know what arguments feed to the docker.
-Also, `bap-toolkit` has no complex dependecies neither from `bap` nor from other libraries,
-that makes it easy to install it itself.
 
-Also `bap-toolkit` provides a friendly way to observe the results of the analysis.
-Those, if the analysis produce an incidents file, then an html report will be stored
+`bap-toolkit` provides a friendly way to observe the results of the analysis.
+Thus, if the analysis produce an incidents file, then an html report will be stored
 in the `results.html` file.
 
 ## Build and install
@@ -17,9 +15,10 @@ in the `results.html` file.
 - docker
 - opam 2.x
 
-Also, don't forget to grant an access to the docker engine for the current user:
+Also, don't forget to grant an access to the docker engine for the current user,
+if you didn't do it before:
 ```
-$: sudo usermod -a -G docker $USER
+:~$ sudo usermod -a -G docker $USER
 ```
 and re-login after that
 
@@ -30,12 +29,12 @@ the installation easier.
 But now one can do the following:
 
 ```
-$: opam switch create 4.07.1
-$: eval `opam config env`
-$: opam install core_kernel.v0.11.1 monads cmdliner
-$: git clone https://github.com/BinaryAnalysisPlatform/bap-toolkit-manager
-$: cd bap-toolkit
-$: make && make install
+:~$ opam switch create 4.07.1
+:~$ eval `opam config env`
+:~$ opam install core_kernel.v0.11.1 monads cmdliner
+:~$ git clone https://github.com/BinaryAnalysisPlatform/bap-toolkit-manager
+:~$ cd bap-toolkit
+:~$ make && make install
 ```
 
 ## Usage
@@ -48,16 +47,13 @@ simple example, which is quite descriptive itself
 and open "results.html" in your favorite browser.
 
 ### Report
-An html report display incidents from the (spoiler!) incidents file.
-The default name "results.html" can be overriden with
-   `bap-toolkit --output="myresults.html`
-   `bap-toolkit -o "myresults.html`
+An html report displays incidents from the (spoiler!) incidents file.
+The default name `results.html` can be overriden with
+   `bap-toolkit --output=myresults.html`
 
 ### Basic options and examples
-- `bap-toolkit --list-recipes` will print a list of recipes with a short decription of each one.
 
-- `bap-toolkit -t <user-provided-tool>`
-  `bap-toolkit --tool=<user-provided-tool>`
+- `bap-toolkit --tool=<user-provided-tool>`
    Being a frontend for `bap` docker infrastructure, `bap-toolkit` still assume an
    extensibility in the part of the underlying docker images. Thus, by default
    it capable to run all the analysis from `binaryanalysisplatform/bap-toolkit`
@@ -66,13 +62,14 @@ The default name "results.html" can be overriden with
    So, the output of
    `bap-toolkit --list-recipes` and
    `bap-toolkit -t <user-provided-tool> --list-recipes`
-   can be different.
+   may differ.
+
+- `bap-toolkit --list-recipes` will print a list of recipes with a short decription of each one.
 
 - `bap-toolkit --list-artifacts` will print a list of available artifacts from the
   `binaryanalysisplatform/bap-artifacts` repository.
 
 - `bap-toolkit --artifacts=/bin/echo,wpa_cli-2.2 --recipes=defective-symbol,jpl-rule-14`
-  `bap-toolkit -a /bin/echo -a wpa_cli-2.2 -r defective-symbol -r jpl-rule-14`
    will run the both of the next analysis: `defective-symbol` and `jpl-rule-14` to
    the file `/bin/echo` and `wpa_cli-2.2`
    Note, that the first artifact will be taken from the host machine, while the second
@@ -122,7 +119,6 @@ The default name "results.html" can be overriden with
 
    Confirmations themself need only for display purposes and could be
    set with
-   `bap-toolkit -c <path>`
    `bap-toolkit --confirmations=<path>`
    Each line in the file at the given path describes a single confirmation.
    e.g.
@@ -155,7 +151,6 @@ The default name "results.html" can be overriden with
 ### View
    View is a list of hints how to display the results of the particular analysis in the html report.
    `bap-toolkit --view=<file>`
-   `bap-toolkit -v <file>`
 
    There are next hints in the view file:
    - alias
@@ -190,8 +185,7 @@ The default name "results.html" can be overriden with
 
 
 ### Misc
-   - `bap-toolkit --incidents=<file>`
-     `bap-toolkit -i <file`
+   - `bap-toolkit --of-incidents=<file>`
      build a report from the incidents file without running any analysis.
      the name of the artifact will be taken from the name of the file for
      display purposes.
@@ -204,8 +198,8 @@ The default name "results.html" can be overriden with
      desktop machine).
      The next sequence of commands
      ```
-     :~$ bap-toolkit --store=my.db -a /bin/echo -r av-rule-174
-     :~$ bap-toolkit --update=my.db -a /bin/ls -r jpl-rule-14
-     :~$ bap-toolkit --from=my.db
+     :~$ bap-toolkit --store=my.results -a /bin/echo -r av-rule-174
+     :~$ bap-toolkit --update=my.results -a /bin/ls -r jpl-rule-14
+     :~$ bap-toolkit --from=my.results
      ```
      will produce an html report for two artifacts: /bin/echo and /bin/ls.

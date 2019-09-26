@@ -4,7 +4,6 @@ open Bap_report_options
 
 module Scheduled = Bap_report_scheduled
 
-
 module Bap_artifact = struct
 
   let image = Docker.Image.of_string_exn "binaryanalysisplatform/bap-artifacts"
@@ -57,13 +56,6 @@ module Bap_artifact = struct
 
 end
 
-let check_equal x y = compare_incident_kind x y = 0
-
-let check_diff xs ys =
-  List.fold xs ~init:[] ~f:(fun ac c ->
-      if List.mem ys c ~equal:check_equal then ac
-      else c :: ac)
-
 module Runner = struct
 
   type t = {
@@ -90,9 +82,15 @@ module Runner = struct
     Out_channel.with_file t.outp
       ~f:(fun ch -> Out_channel.output_string ch doc)
 
-
   let artifacts t = Map.data t.arts |> List.map ~f:snd
 end
+
+let check_equal x y = compare_incident_kind x y = 0
+
+let check_diff xs ys =
+  List.fold xs ~init:[] ~f:(fun ac c ->
+      if List.mem ys c ~equal:check_equal then ac
+      else c :: ac)
 
 let update_time arti checks time =
   List.fold checks ~init:arti
@@ -332,7 +330,7 @@ let o =
 
 let _ = Term.eval (Term.(const main $o $list_recipes $list_artifacts), info)
 
-(*
-TODO: document everything
-TODO: install view file somewhere
+(* TODO: install view file somewhere
+   TODO: maybe it's good idea to add some kind of option
+         to remove/preserve results of analysis, like verbose
 *)
