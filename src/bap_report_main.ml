@@ -14,12 +14,12 @@ module Bap_artifact = struct
     | Local
     | Image
 
-  let run_recipe tool arti kind limit r =
+  let run_recipe ?(verbose=true) tool arti kind limit r =
     match kind with
-    | Local -> Job.run r ~tool ~limit (Artifact.name arti)
+    | Local -> Job.run r ~verbose ~tool ~limit (Artifact.name arti)
     | Image ->
       let image = with_tag (Artifact.name arti) in
-      Job.run r ~tool ~image ~limit "/artifact"
+      Job.run r ~verbose ~tool ~image ~limit "/artifact"
 
   let can't_find tag reason =
     eprintf "can't find %s: %s\n" tag reason
@@ -138,15 +138,20 @@ let print_bap_version tool =
   | Some str -> printf "bap version: %s" str
 
 let print_errors job =
-  List.iter (Job.errors job)
-    ~f:(fun errs ->
-      List.iter errs ~f:(eprintf "%s\n");
-      eprintf "\n")
+  List.iter (Job.errors job) ~f:(eprintf "%s\n")
 
-let run_artifact tool confirmed arti kind recipe limit =
-  printf "running %s %s\n%!" (Artifact.name arti) (Recipe.to_string recipe);
+let startup_time () =
+  let open Unix in
+  let t = gettimeofday () |> localtime in
+  sprintf "%02d:%02d:%02d" t.tm_hour t.tm_min t.tm_sec
+
+let run_artifact verbose tool confirmed arti kind recipe limit =
+  printf "started %s %s at %s\n%!"
+    (Artifact.name arti)
+    (Recipe.to_string recipe)
+    (startup_time ());
   let checks = Artifact.checks arti in
-  let job = Bap_artifact.run_recipe tool arti kind limit recipe in
+  let job = Bap_artifact.run_recipe ~verbose tool arti kind limit recipe in
   print_errors job;
   match Job.incidents job with
   | [] -> arti
@@ -169,24 +174,24 @@ let recipes_of_names tool names =
     List.filter_map names
       ~f:(fun {Scheduled.name;pars} ->
           (match find name with
-           | None -> None
+           | None -> eprintf "can't find recipe %s\n" name; None
            | Some r ->
              List.fold pars ~init:r ~f:(fun r (name,value) ->
                  Recipe.add_parameter r ~name ~value) |>
              Option.some))
 
-let run tool runner confirmed name recipes limit =
+let run verbose tool runner confirmed name recipes limit =
   let recipes = recipes_of_names tool recipes in
   match Runner.get runner name with
   | None -> runner
   | Some (kind,arti) ->
     List.fold ~init:(runner,arti) recipes ~f:(fun (runner,arti) reci ->
-        let arti = run_artifact tool confirmed arti kind reci limit in
+        let arti = run_artifact verbose tool confirmed arti kind reci limit in
         let runner = Runner.update runner (kind,arti) in
         Runner.run runner;
         runner,arti) |> fst
 
-let run_artifacts tool runner confirmed artis recipes limit =
+let run_artifacts verbose tool runner confirmed artis recipes limit =
   let runner =
     List.fold artis
       ~init:runner ~f:(fun r name ->
@@ -198,10 +203,10 @@ let run_artifacts tool runner confirmed artis recipes limit =
   let runner =
     List.fold artis
       ~init:runner ~f:(fun runner name ->
-          run tool runner confirmed name recipes limit) in
+          run verbose tool runner confirmed name recipes limit) in
   Runner.artifacts runner
 
-let run_schedule tool runner confirmed path limit =
+let run_schedule verbose tool runner confirmed path limit =
   let acts = Scheduled.of_file path  in
   let runner =
     List.fold acts
@@ -213,7 +218,7 @@ let run_schedule tool runner confirmed path limit =
     List.fold acts
       ~init:runner
       ~f:(fun runner s ->
-          run tool runner confirmed s.artifact s.recipes limit) in
+          run verbose tool runner confirmed s.artifact s.recipes limit) in
   Runner.artifacts runner
 
 let check_toolkit tool =
@@ -249,11 +254,12 @@ module O = struct
     store      : string option;
     update     : bool;
     of_db      : string option;
-    limits     : (int * Job.Limit.quantity) list;
+    limits     : (int * Limit.quantity) list;
+    verbose    : bool;
   } [@@deriving fields]
 
-  let create a b recipes d e f g h i j k l =
-    Fields.create a b (List.concat recipes) d e f g h i j k l
+  let create a b recipes d e f g h i j k l m =
+    Fields.create a b (List.concat recipes) d e f g h i j k l m
 
 end
 
@@ -294,11 +300,11 @@ let main o print_recipes print_artifacts =
       List.fold artis ~init:runner ~f:(fun r a -> Runner.update r (Local,a))
     | _ -> runner in
   let limit = List.fold o.limits
-                ~init:Job.Limit.empty ~f:(fun l (n,q) -> Job.Limit.add l n q) in
+                ~init:Limit.empty ~f:(fun l (n,q) -> Limit.add l n q) in
   match o.schedule, o.of_incs, o.of_db with
   | Some sch, _, _ ->
     print_bap_version tool;
-    let artis = run_schedule tool runner confirmed sch limit in
+    let artis = run_schedule o.verbose tool runner confirmed sch limit in
     save artis
   | _, Some file,_ -> of_incidents_file confirmed runner file
   | _,_, Some db ->
@@ -308,7 +314,7 @@ let main o print_recipes print_artifacts =
     Runner.run runner
   | _ ->
     print_bap_version tool;
-    run_artifacts tool runner confirmed o.artifacts o.recipes limit |>
+    run_artifacts o.verbose tool runner confirmed o.artifacts o.recipes limit |>
     save
 
 open Cmdliner
@@ -326,11 +332,9 @@ let o =
         $store
         $update
         $of_file
-        $limits)
+        $limits
+        $verbose)
 
 let _ = Term.eval (Term.(const main $o $list_recipes $list_artifacts), info)
 
-(* TODO: install view file somewhere
-   TODO: maybe it's good idea to add some kind of option
-         to remove/preserve results of analysis, like verbose
-*)
+(* TODO: install view file somewhere *)

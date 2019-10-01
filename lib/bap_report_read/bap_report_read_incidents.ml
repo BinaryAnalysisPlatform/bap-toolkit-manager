@@ -37,6 +37,8 @@ module Make(M : Monad.S) = struct
 
   let unresolved = "__primus_linker_unresolved_call"
 
+  let return = S.return
+
   let new_machine pid =
     let pc = Addr.of_string "0" in
     {pid;stack=[];pc; prev_pc=None;}
@@ -59,13 +61,12 @@ module Make(M : Monad.S) = struct
   let opt x f =
     x >>= fun x ->
     match x with
-    | None -> !! ()
+    | None -> return ()
     | Some x -> f x
 
   let (>>~) = opt
 
   let last_n = 5
-
 
   let string_of_addrs addrs =
     String.concat ~sep:" " (List.map ~f:Addr.to_string addrs)
@@ -79,9 +80,9 @@ module Make(M : Monad.S) = struct
         (* to prevent adding lisp calls on the stack  *)
         state.calls, m.stack
       | stack, Some prev_pc ->
-         (* to prevent data rewriting when we have a tail call, e.g.
-            call memset
-            call sub_deadbeaf with no return *)
+        (* to prevent data rewriting when we have a tail call, e.g.
+           call memset
+           call sub_deadbeaf with no return *)
         let pc =
           match Map.find state.calls prev_pc with
           | Some _ -> m.pc
@@ -125,24 +126,24 @@ module Make(M : Monad.S) = struct
   let path addr =
     let from_syms s =
       match Map.find s.syms addr with
-      | None -> !! []
-      | Some s -> !! [s] in
+      | None -> return []
+      | Some s -> return [s] in
     let from_calls s =
-      !! (Option.value ~default:[] (Map.find s.calls addr)) in
+      return (Option.value ~default:[] (Map.find s.calls addr)) in
     let from_stack =
       machine >>= fun m ->
       match m with
-      | None -> !! []
+      | None -> return []
       | Some m ->
-        !! (List.take m.stack last_n |> List.map ~f:snd) in
+        return (List.take m.stack last_n |> List.map ~f:snd) in
     S.get () >>= fun s ->
     let order = [from_calls s; from_stack; from_syms s] in
     S.List.find_map order ~f:(fun f ->
         f >>= function
-        | [] -> !! None
-        | x -> !! (Some x)) >>= function
-    | None -> !! []
-    | Some x -> !! x
+        | [] -> return None
+        | x -> return (Some x)) >>= function
+    | None -> return []
+    | Some x -> return x
 
   let locs_to_str locs =
     String.concat ~sep:" " @@
@@ -154,8 +155,10 @@ module Make(M : Monad.S) = struct
     machine >>= fun m ->
     match List.filter_map locs ~f:(location_addr s.hist) with
     | [] ->
-      eprintf "WARNING! missed incident!\n";
-      !! ()
+      eprintf "WARNING! missed incident with locations %s\n" @@
+      List.fold locs ~init:"" ~f:(fun s loc ->
+          sprintf "%s%s " s @@ Location_id.to_string loc);
+      return ()
     | addr :: prev ->
       path addr >>= fun path ->
       let locs = Locations.create ~prev addr in
@@ -190,7 +193,7 @@ module Make(M : Monad.S) = struct
   let event = function
     | Switch (a,b) -> switch (a,b)
     | Fork   (a,b) -> fork (a,b)
-    | Call name | Call_return name when name = unresolved -> !! ()
+    | Call name | Call_return name when name = unresolved -> return ()
     | Call name -> call name
     | Call_return name -> call_return name
     | Incident_location (id,addrs) -> incident_location (id,addrs)
@@ -201,7 +204,7 @@ module Make(M : Monad.S) = struct
   let run ch =
     let rec loop () =
       match Parse.read ch with
-      | None -> !! ()
+      | None -> return ()
       | Some ev -> event ev >>= loop in
     loop ()
 end

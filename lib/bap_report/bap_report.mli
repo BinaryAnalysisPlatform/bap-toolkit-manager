@@ -43,12 +43,12 @@ module Std : sig
 
     (** [run ~entry ~mount image cmd] runs [cmd] with the docker [image].
 
-      @param mount defines a mounting volume as a pair of pathes
+        @param mount defines a mounting volume as a pair of pathes
              in the host and in the image.
 
-      @param entry override an entrypoint for the [image] *)
+        @param entry override an entrypoint for the [image] *)
     val run : ?entry:string ->
-              ?mount:string * string -> image -> string -> string option
+      ?mount:string * string -> image -> string -> string option
 
   end
 
@@ -61,14 +61,14 @@ module Std : sig
     | False_pos
     | False_neg
     | Undecided
-   [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   type stat = {
-      false_pos : int;
-      false_neg : int;
-      confirmed : int;
-      undecided : int;
-   }[@@deriving bin_io, compare, sexp]
+    false_pos : int;
+    false_neg : int;
+    confirmed : int;
+    undecided : int;
+  }[@@deriving bin_io, compare, sexp]
 
   type locations     [@@deriving bin_io, compare, sexp]
   type incident      [@@deriving bin_io, compare, sexp]
@@ -101,38 +101,41 @@ module Std : sig
     val to_string : t -> string
   end
 
-  module Job : sig
-
-    module Limit : sig
-      type quantity = [
-        | `S  (** seconds  *)
-        | `M  (** minutes *)
-        | `H  (** hours *)
-        | `Mb (** megabytes *)
-        | `Gb (** gigabytes *)
-      ]
-
-      type t
-
-      val empty : t
-
-      (** [add num quantity] adds a new limit *)
-      val add  : t -> int -> quantity -> t
-
-      val quantity_of_string : string -> quantity option
-      val string_of_quantity : quantity -> string
-
-    end
+  module Limit : sig
+    type quantity = [
+      | `S  (** seconds  *)
+      | `M  (** minutes *)
+      | `H  (** hours *)
+      | `Mb (** megabytes *)
+      | `Gb (** gigabytes *)
+    ]
 
     type t
-    type limit = Limit.t
 
-    (** [run recipe ~tool ~image ~limit path ] runs the recipe.
+    val empty : t
+
+    (** [add num quantity] adds a new limit *)
+    val add  : t -> int -> quantity -> t
+
+    val quantity_of_string : string -> quantity option
+    val string_of_quantity : quantity -> string
+
+  end
+
+  type limit = Limit.t
+
+  module Job : sig
+
+    type t
+
+    (** [run recipe ~tool ~verbose=true ~image ~limit path ] runs the recipe.
         [tool] is an image responsible for running the recipe.
         if [image] is set then [path] is considered
         relatively to the [image], else to the host filesystem.
-        returns a time that was spent to process the recipe. *)
-    val run : recipe -> tool:image -> ?image:image -> ?limit:limit -> string -> t
+        returns a time that was spent to process the recipe.
+
+        @param verbose saves bap BIR and asm output, true by default *)
+    val run : recipe -> tool:image -> ?verbose:bool -> ?image:image -> ?limit:limit -> string -> t
 
     (** [time job] returns time  in seconds spent for the job [t] *)
     val time : t -> float
@@ -140,19 +143,17 @@ module Std : sig
     (** [incidents t] returns a list of incidents *)
     val incidents : t -> incident list
 
-    (** [errors t] returns a list of errors from the log.
-        Each error is represented by a list of messages (strings)
-        that describe error, e.g. backtrace, OCaml error messages etc*)
-    val errors : t -> string list list
+    (** [errors t] returns a list of errors from the stderr *)
+    val errors : t -> string list
 
   end
 
 
   module Size : sig
 
-   (** [get ?image path] returns the size of the file at [path].
-      if [image] is set then [path] is considered
-      relatively to the [image], else to the host filesystem*)
+    (** [get ?image path] returns the size of the file at [path].
+        if [image] is set then [path] is considered
+        relatively to the [image], else to the host filesystem*)
     val get : ?image:image -> string -> int option
 
   end
@@ -172,7 +173,7 @@ module Std : sig
       - address of memory allocation
       - address of memory free
       - address of usage after free.
-      The last one is considered as incident address *)
+        The last one is considered as incident address *)
   module Locations : sig
 
     type t = locations [@@deriving bin_io, compare, sexp]
@@ -287,13 +288,13 @@ module Std : sig
   (** Confirmation is an expected incident and it could be
       either of two kinds:
 
-    - must - such one which MUST come up during the analysis
-      and therefore an absence of such incindent is False negative,
-      and a presence is a Confirmed incident
+      - must - such one which MUST come up during the analysis
+        and therefore an absence of such incindent is False negative,
+        and a presence is a Confirmed incident
 
-    - may - such one which MAY come up during the analysis.
-      and therefore an absence of such incindent is not a mistake,
-      and a presence is False positive.  *)
+      - may - such one which MAY come up during the analysis.
+        and therefore an absence of such incindent is not a mistake,
+        and a presence is False positive.  *)
   module Confirmation : sig
 
     type t = confirmation [@@deriving sexp,compare,bin_io]

@@ -3,20 +3,18 @@ open Core_kernel
 type entry =
   | Bap_error
 
-type message = string list
-
-type t = (entry * message) list
+type t = (entry * string list) list
 
 let message_of_string line =
   let ended_with_more str =
     String.(is_suffix (strip str) ~suffix:">") in
   match String.split line ~on:' ' with
   | source :: _ when ended_with_more source ->
-     let data =
-       String.(strip (chop_prefix_exn ~prefix:source line)) in
-     let source =
-       String.(chop_suffix_exn ~suffix:">" (strip source)) in
-     Some (source,data)
+    let data =
+      String.(strip (chop_prefix_exn ~prefix:source line)) in
+    let source =
+      String.(chop_suffix_exn ~suffix:">" (strip source)) in
+    Some (source,data)
   | _ -> None
 
 let is_bap_error str = str = "bap.error"
@@ -35,16 +33,16 @@ let read ch =
     match In_channel.input_line ch with
     | None -> List.rev (add ready acc entry)
     | Some line ->
-       match message_of_string line with
-       | None ->
-          if Option.is_some entry then
-            loop ready entry (line :: acc)
-          else loop ready entry acc
-       | Some (src,data) ->
-          match find_known src with
-          | None -> loop (add ready acc entry) None acc
-          | entry' ->
-             loop (add ready acc entry) entry' [data] in
+      match message_of_string line with
+      | None ->
+        if Option.is_some entry then
+          loop ready entry (line :: acc)
+        else loop ready entry acc
+      | Some (src,data) ->
+        match find_known src with
+        | None -> loop (add ready acc entry) None acc
+        | entry' ->
+          loop (add ready acc entry) entry' [data] in
   loop [] None []
 
 let of_file log =
@@ -53,6 +51,6 @@ let of_file log =
   else None
 
 let errors t =
-  List.filter_map t ~f:(fun (x,data) ->
-      if x = Bap_error then Some data
-      else None)
+  List.fold t ~init:[] ~f:(fun acc (x,data) ->
+      if x = Bap_error then data::acc
+      else acc) |> List.rev |> List.concat

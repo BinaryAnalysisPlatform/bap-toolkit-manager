@@ -8,7 +8,6 @@ type info =
   | Cpu
   | Time
   | Maximum_res_mem
-  | Average_res_mem
   | Exit_status
 [@@deriving sexp,bin_io,compare,hash]
 
@@ -31,30 +30,27 @@ end
 
 type t = string Info.Map.t
 
-let info_of_string s =
-  let (!) = Option.some in
-  match String.split ~on:' ' s with
-  | "Command" :: _ -> !Command
-  | "Exit" :: "status" :: _ -> !Exit_status
-  | "User" :: "time" :: _ -> !User_time
-  | "System" :: "time" :: _ -> !Sys_time
-  | "Elapsed" :: _ -> !Time
-  | "Maximum" :: "resident" :: _ -> !Maximum_res_mem
-  | "Average" :: "resident" :: _ -> !Average_res_mem
-  | "Percent" :: "of" :: "CPU" :: _ -> ! Cpu
-  | _ -> None
+let known_prefixes = [
+  "Command being timed", Command;
+  "User time (seconds)", User_time;
+  "System time (seconds)", Sys_time;
+  "Percent of CPU this job got", Cpu;
+  "Elapsed (wall clock) time (h:mm:ss or m:ss)", Time;
+  "Maximum resident set size (kbytes)", Maximum_res_mem;
+  "Exit status", Exit_status;
+]
 
-let parse line =
-  let line = String.strip line in
-  match String.index line ':' with
+let find_info s =
+  List.find known_prefixes ~f:(fun (p,_) -> String.is_prefix s ~prefix:p)
+
+let info_of_string s =
+  let s = String.strip s in
+  match find_info s with
   | None -> None
-  | Some i ->
-    let info = String.subo ~pos:0 ~len:i line in
-    match info_of_string info with
-    | None -> None
-    | Some info ->
-      let data = String.subo ~pos:(i+1) line in
-      Some (info,String.strip data)
+  | Some (pref, info) ->
+    Some (info,
+          String.strip @@
+          String.subo ~pos:(String.length pref + 1) s)
 
 let of_file file =
   if Sys.file_exists file then
@@ -63,9 +59,9 @@ let of_file file =
         List.fold (In_channel.input_lines ch)
           ~init:(Map.empty (module Info))
           ~f:(fun m line ->
-            match parse line with
-            | None -> m
-            | Some (info,data) -> Map.set m info data))
+              match info_of_string line with
+              | None -> m
+              | Some (info,data) -> Map.set m info data))
   else None
 
 let command t = Map.find t Command
@@ -80,14 +76,14 @@ let float_of_time xs =
   let (>>=) = Option.bind in
   match xs with
   | [h; m; s] ->
-     float_of_string h >>= fun h ->
-     float_of_string m >>= fun m ->
-     float_of_string s >>= fun s ->
-     Some (h *. 60. *. 60. +. m *. 60. +. s)
+    float_of_string h >>= fun h ->
+    float_of_string m >>= fun m ->
+    float_of_string s >>= fun s ->
+    Some (h *. 60. *. 60. +. m *. 60. +. s)
   | [m; s] ->
-     float_of_string m >>= fun m ->
-     float_of_string s >>= fun s ->
-     Some (m *. 60. +. s)
+    float_of_string m >>= fun m ->
+    float_of_string s >>= fun s ->
+    Some (m *. 60. +. s)
   | [s] -> float_of_string s
   | _ -> None
 
@@ -99,17 +95,17 @@ let parse_time_fmt_2 xs =
   let without_suf s ~suf = String.chop_suffix s ~suffix:suf in
   match xs with
   | [h; m; s] ->
-     without_suf h "h" >>= fun h ->
-     without_suf m "m" >>= fun m ->
-     without_suf s "s" >>= fun s ->
-     float_of_time [h;m;s]
+    without_suf h "h" >>= fun h ->
+    without_suf m "m" >>= fun m ->
+    without_suf s "s" >>= fun s ->
+    float_of_time [h;m;s]
   | [m; s] ->
-     without_suf m "m" >>= fun m ->
-     without_suf s "s" >>= fun s ->
-     float_of_time [m;s]
+    without_suf m "m" >>= fun m ->
+    without_suf s "s" >>= fun s ->
+    float_of_time [m;s]
   | [s] ->
-     without_suf s "s" >>= fun s ->
-     float_of_time [s]
+    without_suf s "s" >>= fun s ->
+    float_of_time [s]
   | _ -> None
 
 let parse_time str =
@@ -129,5 +125,5 @@ let cpu_percentage t =
     String.filter str ~f:(fun c -> c <> '%') |> String.strip |>
     int_of_string)
 
-let elapced t =
+let elapsed t =
   Option.(Map.find t Time >>= parse_time)

@@ -38,7 +38,7 @@ module Recipes = struct
 end
 
 module Limit_arg = struct
-  open Job.Limit
+  open Limit
 
   type t = int * quantity
 
@@ -175,7 +175,11 @@ let limits =
         10s - 10 seconds
         10m - 10 minutes
         10h - 10 hours
-      memory:
+      resident memory:
         10Mb - 10 Megabytes
         10Gb - 10 Gigabytes" in
   Arg.(value & opt_all Limit_arg.conv [] & info ["limit"; ] ~doc)
+
+let verbose =
+  let doc = "Preserves BIR and assembler output, true by default" in
+  Arg.(value & opt bool true & info ["verbose";] ~doc)
