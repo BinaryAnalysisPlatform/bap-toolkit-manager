@@ -1,185 +1,108 @@
 open Core_kernel
 open Cmdliner
 open Bap_report.Std
+
+module Cmd = Bap_report_cmd_terms
+
 open Bap_report_scheduled
 
+type mode =
+  | From_incidents of string
+  | From_stored    of string
+  | Run_artifacts  of (string list * recipe list) list
 
-module Recipes = struct
-  type t = requested_recipe list
+type job_ctxt = {
+  tool    : image;
+  limit   : limit;
+  verbose : bool;
+}
 
-  let printer fmt recipes =
-    List.iter recipes ~f:(fun {name;pars} ->
-        let args = List.map pars ~f:(fun (a,b) -> sprintf "%s=%s" a b) in
-        Format.fprintf fmt "%s with %s\n" name
-          (String.concat ~sep:"," args))
+type t = {
+  mode       : mode;
+  context    : job_ctxt;
+  confirms   : string option;
+  output     : string;
+  view       : string option;
+  store      : string option;
+  update     : bool;
+} [@@deriving fields]
 
-  let with_no_pars xs = List.map xs ~f:(fun x -> {name=x; pars=[]})
+let find_recipe tool r =
+  let name = Cmd.requested_name r in
+  match Recipe.find tool name with
+  | None -> Or_error.errorf "can't find recipe %s\n" name
+  | Some recipe ->
+    let recipe =
+      List.fold (Cmd.requested_pars r) ~init:recipe
+        ~f:(fun recipe (p,v) ->
+            Recipe.add_parameter recipe p v) in
+    Ok recipe
 
-  let parse_par a =
-    match String.split a ~on:'=' with
-    | [arg;value] -> arg,value
-    | _ ->
-      eprintf "can't parse argument %s, should be in the form arg=value\n" a;
-      exit 1
+let all_recipes tool = Recipe.list tool
 
-  let parser : t Arg.parser = fun str ->
-    match String.split ~on:':' str with
-    | [names]  -> `Ok (with_no_pars (String.split ~on:',' names))
-    | [name;pars] ->
-      let pars = String.split pars ~on:',' in
-      let pars = List.map pars ~f:parse_par in
-      `Ok ([{name; pars}])
-    | _ -> `Error (sprintf
-                     "don't know what to do with %s, see help for details" str)
+let create_recipes tool recipes =
+  match List.find recipes ~f:(fun r -> Cmd.requested_name r = "all") with
+  | Some _ -> Ok (all_recipes tool)
+  | None ->
+    Result.all @@ List.map recipes ~f:(find_recipe tool)
 
+let create mode ctxt a b c d e =
+  Fields.create mode ctxt a b c d e
 
-  let conv : t Arg.conv = parser,printer
+let make_run = function
+  | Error er ->
+    eprintf "%s\n" @@ Error.to_string_hum er;
+    exit 1
+  | Ok xs -> Run_artifacts xs
 
-end
+let infer_mode ctxt of_schedule of_file of_incidents artifacts recipes =
+  let (>>=) = Or_error.(>>=) in
+  match of_schedule, of_file, of_incidents with
+  | Some f,_,_ ->
+    let acts = Bap_report_scheduled.of_file f in
+    let rs =
+      List.fold acts
+        ~init:(Ok [])
+        ~f:(fun acc s ->
+            acc >>= fun acc ->
+            create_recipes ctxt.tool s.recipes >>= fun rs ->
+            Ok (([s.artifact], rs) :: acc)) in
+    make_run rs
+  | _,Some f,_ -> From_stored f
+  | _,_,Some f -> From_incidents f
+  | _ ->
+    let rs =
+      Ok (List.concat artifacts) >>= fun artis ->
+      create_recipes ctxt.tool (List.concat recipes) >>= fun recipes ->
+      Ok [artis,recipes] in
+    make_run rs
 
-module Limit_arg = struct
-  open Limit
+let context tool limits verbose =
+  match Docker.Image.of_string tool with
+  | Error er ->
+    eprintf "can't find tool %s: %s" tool (Error.to_string_hum er);
+    exit 1
+  | Ok tool ->
+    let limit = List.fold limits
+        ~init:Limit.empty ~f:(fun l (n,q) -> Limit.add l n q) in
+    {tool; verbose; limit}
 
-  type t = int * quantity
+open Cmd
 
-  let printer fmt (n, q) =
-    Format.fprintf fmt "%d %s" n (string_of_quantity q)
-
-  let chop_suffix str suf = match suf with
-    | None -> Some str
-    | Some suffix -> String.chop_suffix str ~suffix
-
-  let nums = Str.regexp "[0-9]+"
-
-  let parser s =
-    let error =
-      `Error (sprintf  "string '%s' doesn't fit to limit format" s) in
-    if Str.string_match nums s 0 then
-      if Str.match_beginning () = 0 then
-        let num = Str.matched_string s in
-        match String.chop_prefix ~prefix:num s with
-        | None | Some "" -> error
-        | Some suf ->
-           match quantity_of_string suf with
-           | Some q -> `Ok (int_of_string num,q)
-           | None -> error
-      else error
-    else error
-
-  let conv : t Arg.conv = parser,printer
-end
-
-
-let doc = "Bap toolkit"
-
-let man = [
-  `S "SYNOPSIS";
-  `Pre "
-      $(mname) --artifacts=... --recipes=...
-      $(mname) --artifacts=... --recipes=... --confirmations=...
-      $(mname) --schedule=...
-      $(mname) --list-recipes
-      $(mname) --list-artifacts";
-
-  `S "Description";
-  `P "A frontend to the whole bap and docker infrastructures,
-        that hides all the complexity under the hood: no bap
-        installation required, no manual pulling of docker
-        images needed.";
-
-  `P  "It allows easily to run
-        the various of checks against the various of artifacts
-        and get a frendly HTML report with all the incidents found.";
-
-]
-
-let info = Term.info ~version:"dev" ~man ~doc "bap-tookit"
-
-let schedule =
-  let doc = "creates a schedule of artifacts and recipes to run
-             from a provided file, that contains s-expressions in
-             the form:
-             (artifact1 (recipe1 recipe2))
-             (artifact2 recipe1)
-             (artifact3 all)
-             ... " in
-  Arg.(value & opt (some string) None & info ~doc ["schedule"; "s"])
-
-let strings = Arg.(list string)
-
-let artifacts =
-  let doc = "A comma-separated list of artifacts to check.
-             Every artifact is either a file in the system
-             or a TAG from binaryanalysisplatform/bap-artifacts
-             docker image" in
-  Arg.(value & opt strings [] & info ["artifacts"; "a"] ~doc)
-
-let recipes : Recipes.t list Term.t =
-  let doc = "a comma-separated list of the recipes to run.
-             A special key $(i,all) can be used to run all the recipes.
-             A recipe with parameters should be set individually with
-             the same arg:
-             --recipes=r1 --recipes=r2:par1=val1,par2=val2
-             OR
-             -r r1 -r r2:par1=val1,par2=val2 -r r3" in
-  Arg.(value & opt_all Recipes.conv [] & info ["recipes"; "r"] ~doc)
-
-let confirms =
-  let doc = "file with confirmations. " in
-  Arg.(value & opt (some non_dir_file) None & info ["confirmations"; "c"] ~doc)
-
-let output =
-  let doc = "file with results" in
-  Arg.(value & opt string "results.html" & info ["output"; "o"] ~doc)
-
-let list_recipes =
-  let doc = "prints the list of available recipes and exits" in
-  Arg.(value & flag & info ["list-recipes"] ~doc)
-
-let list_artifacts =
-  let doc = "prints list of available artifacts and exits" in
-  Arg.(value & flag & info ["list-artifacts"] ~doc)
-
-let of_incidents =
-  let doc = "create a report from file with incidents" in
-  Arg.(value & opt (some non_dir_file) None & info ["of-incidents"; "i"] ~doc)
-
-let tool =
-  let default = "binaryanalysisplatform/bap-toolkit:latest" in
-  let doc = "A tool used to run analysis (default is binaryanalysisplatform/bap-toolkit).
-             Tags could be fed as expected, with ':' separator" in
-  Arg.(value & opt string default & info ["tool"; "t"] ~doc)
-
-let view =
-  let doc = "use a view file with view for rendering incidents" in
-  Arg.(value & opt (some non_dir_file) None & info ["view"; "v"] ~doc)
-
-let store =
-  let doc = "store results in the file" in
-  Arg.(value & opt (some string) None & info ["store"] ~doc)
-
-let update =
-  let doc = "update file with results (e.g. run another analysis)" in
-  Arg.(value & flag & info ["update"] ~doc)
-
-let of_file =
-  let doc = "create a report from previously stored data" in
-  Arg.(value & opt (some string) None & info ["from"; "-f"] ~doc)
-
-let limits =
-  let doc =
-    "Set a memory/time limit per running recipe.
-     Job will be canceled if a limit exceeded be canceled.
-     Possible limitations:
-      time:
-        10s - 10 seconds
-        10m - 10 minutes
-        10h - 10 hours
-      resident memory:
-        10Mb - 10 Megabytes
-        10Gb - 10 Gigabytes" in
-  Arg.(value & opt_all Limit_arg.conv [] & info ["limit"; ] ~doc)
-
-let verbose =
-  let doc = "Preserves BIR and assembler output, true by default" in
-  Arg.(value & opt bool true & info ["verbose";] ~doc)
+let options =
+  let ctxt = Term.(const context $tool $limits $verbose) in
+  let mode = Term.(const infer_mode
+                   $ctxt
+                   $schedule
+                   $of_file
+                   $of_incidents
+                   $artifacts
+                   $recipes) in
+  Term.(const create
+        $mode
+        $ctxt
+        $confirms
+        $output
+        $view
+        $store
+        $update)

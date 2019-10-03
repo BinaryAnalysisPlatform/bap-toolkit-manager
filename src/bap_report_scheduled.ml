@@ -1,15 +1,11 @@
 open Core_kernel
 open Bap_report.Std
 
-type requested_recipe = {
-  name : string;
-  pars : (string * string) list
-}
-
+module Cmd = Bap_report_cmd_terms
 
 type scheduled = {
   artifact : string;
-  recipes  : requested_recipe list
+  recipes  : Cmd.requested_recipe list
 }
 
 
@@ -47,10 +43,10 @@ module Parse = struct
   let parse_recipe s =
     let open Sexp in
     match s with
-    | Atom s -> Ok {name = s; pars = []}
+    | Atom name -> Ok Cmd.{name; pars = []}
     | List (Atom name :: params) ->
-      all ~f:parse_params params >>= fun pars ->
-      Ok {name;pars}
+       all ~f:parse_params params >>= fun pars ->
+       Ok Cmd.{name; pars}
     | _ -> Or_error.errorf "can't parse schedule line %s\n" (Sexp.to_string s)
 
   let of_file path : scheduled list =
@@ -60,10 +56,10 @@ module Parse = struct
         let line = sprintf "(%s)" line in
         match Sexp.of_string line with
         | Sexp.List (Sexp.Atom artifact :: recipes) ->
-          let acc = match all ~f:parse_recipe recipes with
-            | Ok recipes -> {artifact; recipes } :: acc
-            | Error er -> report_error_and_exit artifact er  in
-          read acc lines
+           let acc = match all ~f:parse_recipe recipes with
+               | Ok recipes -> {artifact; recipes } :: acc
+               | Error er -> report_error_and_exit artifact er  in
+           read acc lines
         | _ -> read acc lines in
     read [] (In_channel.with_file path ~f:(Read.Helper.lines ~comments:"#"))
 

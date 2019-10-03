@@ -20,7 +20,9 @@ module Image : sig
 
   val pull : t -> unit
 
-  val tags: t -> string list
+  val tags : t -> string list
+
+  val name : t -> string
 end
 
 type image = Image.t

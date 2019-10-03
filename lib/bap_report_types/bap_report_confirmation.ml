@@ -31,4 +31,4 @@ let validate {conf} status =
   | Must, None -> False_neg
   | Must, Some _ -> Confirmed
 
-let is conf' {conf} = conf' = conf
+let is {conf} conf' = conf' = conf

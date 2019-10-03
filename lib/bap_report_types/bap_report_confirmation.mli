@@ -17,6 +17,6 @@ val confirmation : t -> kind
 
 val validate : t -> status option -> status
 
-val is : kind -> t -> bool
+val is : t -> kind -> bool
 
 val id : t -> Bap_report_incident.id

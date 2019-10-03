@@ -48,19 +48,34 @@ let workdir ?image path recipe =
       sprintf "%s.%s" (Docker.Image.to_string im) recipe
     | Some tag -> sprintf "%s.%s" tag recipe
 
+let tar_list tar =
+  match cmd "tar -ztf %s" tar with
+  | None -> []
+  | Some s ->
+     List.filter_map ~f:(fun x ->
+         let x = String.strip x in
+         if String.is_empty x then None
+         else Some x) @@
+       String.split ~on:'\n' s
+
+let tar_exists ~file tar =
+  List.exists (tar_list tar) ~f:(fun s -> String.equal s file)
+
 let read_tar ?target_dir target_file tar read =
   if Sys.file_exists tar then
     let dir = Filename.remove_extension tar in
     let path = match target_dir with
       | None -> sprintf "%s/%s" dir target_file
       | Some dir' -> sprintf "%s/%s/%s" dir dir' target_file in
-    let _ = cmd "tar xzf %s %s" tar path in
-    if Sys.file_exists path then
-      let r = read path in
-      Sys.remove path;
-      Option.iter target_dir ~f:(fun dir' -> Unix.rmdir (sprintf "%s/%s" dir dir'));
-      Unix.rmdir dir;
-      r
+    if tar_exists ~file:path tar then
+      let _ = cmd "tar xzf %s %s" tar path in
+      if Sys.file_exists path then
+        let r = read path in
+        Sys.remove path;
+        Option.iter target_dir ~f:(fun dir' -> Unix.rmdir (sprintf "%s/%s" dir dir'));
+        Unix.rmdir dir;
+        r
+      else None
     else None
   else None
 

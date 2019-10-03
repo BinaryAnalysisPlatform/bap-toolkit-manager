@@ -2,9 +2,14 @@ open Core_kernel
 open Bap_report_common
 
 module Kind = struct
-  let of_string x = x
-  let to_string x = x
-  include String
+  type t = string [@@deriving bin_io, compare, hash, sexp]
+  module T = struct
+    type nonrec t = t [@@deriving bin_io,compare,hash,sexp]
+    let module_name = "Bap_report.Std.Kind"
+    let of_string x = x
+    let to_string x = x
+  end
+  include Identifiable.Make(T)
 end
 
 module Locations = struct

@@ -85,32 +85,6 @@ module Image = struct
 
   type t = image
 
-  let check name  =
-    match String.split name ~on:':' with
-    | [name;tag] -> Ok (name, Some tag)
-    | [name] -> Ok (name, None)
-    | _ -> Or_error.errorf "can't infer image name from the %s" name
-
-  let of_string s =
-    let (>>=) = Or_error.(>>=) in
-    check s >>= fun (name,tag) ->
-    Ok (name,tag)
-
-  let of_string_exn s =
-    match of_string s with
-    | Ok im -> im
-    | Error e -> raise (Invalid_argument (Error.to_string_hum e))
-
-  let to_string (name,tag) =
-    match tag with
-    | None -> name
-    | Some tag -> sprintf "%s:%s" name tag
-
-  let tag (_,tag) = tag
-  let name (name,_) = name
-
-  let with_tag (name,_) tag = name, Some tag
-
   let exists_locally image =
     let module E = Exists(Loc_available) in
     E.test image
@@ -121,10 +95,10 @@ module Image = struct
 
   let exists image = exists_locally image || exists_globaly image
 
-  let tags (image,_) =
-    match Net_available.tags image with
-    | [] -> Loc_available.tags image
-    | tags -> tags
+  let to_string (name,tag) =
+    match tag with
+    | None -> name
+    | Some tag -> sprintf "%s:%s" name tag
 
   let pull image =
     let image = to_string image in
@@ -139,6 +113,35 @@ module Image = struct
       else
         Or_error.errorf "can't pull image %s" (to_string image)
     else Or_error.errorf "can't detect image %s" (to_string image)
+
+  let check name  =
+    match String.split name ~on:':' with
+    | [name;tag] -> Ok (name, Some tag)
+    | [name] -> Ok (name, None)
+    | _ -> Or_error.errorf "can't infer image name from the %s" name
+
+  let (>>=) = Or_error.(>>=)
+
+  let of_string s =
+    check s >>= fun im  ->
+    get im >>= fun () ->
+    Ok im
+
+  let of_string_exn s =
+    match of_string s with
+    | Ok im -> im
+    | Error e -> raise (Invalid_argument (Error.to_string_hum e))
+
+  let tag (_,tag) = tag
+  let name (name,_) = name
+
+  let with_tag (name,_) tag = name, Some tag
+
+  let tags (image,_) =
+    match Net_available.tags image with
+    | [] -> Loc_available.tags image
+    | tags -> tags
+
 end
 
 let run ?entry ?mount image cmd' =

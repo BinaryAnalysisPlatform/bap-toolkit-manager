@@ -39,6 +39,9 @@ module Std : sig
       (** [with_tag t tag] return the image [r] with a new [tag] *)
       val with_tag: t -> string -> t
 
+      (** [name im] return name of the image [im] *)
+      val name : t -> string
+
     end
 
     (** [run ~entry ~mount image cmd] runs [cmd] with the docker [image].
@@ -190,13 +193,11 @@ module Std : sig
       by each analysis independently, e.g.
       - null-pointer-dereference
       - use-after-free
-      - recursice-function *)
+      - recursive-function *)
   module Incident : sig
 
     module Kind : sig
       type t = incident_kind  [@@deriving bin_io, compare, sexp]
-      val of_string : string -> t
-      val to_string : t -> string
       include Identifiable.S   with type t := t
     end
 
@@ -312,13 +313,10 @@ module Std : sig
     val create : kind -> incident_kind -> locations -> t
 
     val id : t -> incident_id
-
-
     val locations : t -> locations
     val incident_kind : t -> incident_kind
     val confirmation : t -> kind
-
-    val is : kind -> t -> bool
+    val is : t -> kind -> bool
 
     (** [validate conf status] - for a given
         confirmation and incident status returns
