@@ -3,7 +3,8 @@
 
 `bap-toolkit` provides an easy way to run `bap` against variety of artifacts and analysis.
 Underneath of the hood `bap-toolkit` is an extra layer for docker containers, so there is no
-need to install `bap` manually or to know what arguments feed to the docker.
+need to install `bap` manually or to know what arguments feed to the docker (host installation
+is also supported though).
 
 `bap-toolkit` provides a friendly way to observe the results of the analysis.
 Thus, if the analysis produce an incidents file, then an html report will be stored
@@ -50,6 +51,16 @@ and open "results.html" in your favorite browser.
 An html report displays incidents from the (spoiler!) incidents file.
 The default name `results.html` can be overriden with
    `bap-toolkit --output=myresults.html`
+There is no strict requirements to the minimum set of observations in
+the incidents file, but in order to get a more meaningful report better
+to have at least the next:
+- fork
+- switch
+- pc-changed
+- call
+- call-return
+- incident
+- incident-location
 
 ### Basic options and examples
 
@@ -63,6 +74,7 @@ The default name `results.html` can be overriden with
    `bap-toolkit --list-recipes` and
    `bap-toolkit -t <user-provided-tool> --list-recipes`
    may differ.
+   Also, host installation and recipes could be used: `bap-toolkit -t host`
 
 - `bap-toolkit --list-recipes` will print a list of recipes with a short decription of each one.
 

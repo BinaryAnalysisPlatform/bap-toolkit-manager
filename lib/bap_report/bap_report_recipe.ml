@@ -33,6 +33,9 @@ type recipe = t
 let name t = t.name
 let description t = t.desc
 
+let create ~name ~desc =
+  {name;desc;args=[];kinds=[]}
+
 let list tool =
   let recipe_of_string s =
     match split_on_first ~on:[' '; '\t'] s with

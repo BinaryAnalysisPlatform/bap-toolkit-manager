@@ -4,13 +4,9 @@ open Bap_report_options
 
 module Scheduled = Bap_report_scheduled
 
-type artifact_kind =
-  | Local
-  | Image
-
 type t = {
-  ctxt  : job_ctxt;
-  artis : (artifact_kind * artifact) String.Map.t;
+  ctxt  : Job.ctxt;
+  artis : (path * artifact) String.Map.t;
   confirmed: confirmation Incident.Id.Map.t String.Map.t;
   output  : string;
 }
@@ -31,15 +27,6 @@ module Bap_artifact = struct
 
   let with_tag tag = Docker.Image.with_tag image tag
 
-  let run ctxt =
-    Job.run ~verbose:ctxt.verbose ~tool:ctxt.tool ~limit:ctxt.limit
-
-  let run_recipe ctxt arti kind r  =
-    let run = run ctxt r in
-    match kind with
-    | Local -> run (Artifact.name arti)
-    | Image -> run ~image:(with_tag (Artifact.name arti)) "/artifact"
-
   let can't_find tag reason = eprintf "can't find %s: %s\n" tag reason
 
   let artifact_exists tag =
@@ -56,21 +43,19 @@ module Bap_artifact = struct
         false
       | _ -> true
 
-  let kind_of_name name =
-    if Sys.file_exists name then Some Local
-    else if artifact_exists name then Some Image
+  let path_of_name name =
+    if Sys.file_exists name then Some (Path.create name)
+    else if artifact_exists name then
+      Some (Path.create ~image:(with_tag name) "/artifact")
     else None
 
   let find name =
-    match kind_of_name name with
+    match path_of_name name with
     | None -> None
-    | Some Local ->
-      let size = Size.get name in
-      Some (Local, Artifact.create ?size name)
-    | Some Image ->
-      let image = with_tag name in
-      let size = Size.get ~image "/artifact" in
-      Some (Image, Artifact.create ?size name)
+    | Some path ->
+      let size = Path.size path in
+      Some (path, Artifact.create ?size name)
+
 end
 
 let render t =
@@ -109,7 +94,8 @@ let confirm confirmations arti kinds =
     let checks = Artifact.checks arti in
     Map.fold confirmed ~init:arti ~f:(fun ~key:id ~data:conf arti ->
         let k = Confirmation.incident_kind conf in
-        if not (List.mem checks k ~equal:Incident.Kind.equal) then arti
+        if not (List.mem checks k ~equal:Incident.Kind.equal)
+        then arti
         else
           match Artifact.find arti id with
           | Some (inc,st) ->
@@ -138,13 +124,13 @@ let missed_kinds recipe incidents =
       ~f:(fun kinds inc -> Set.add kinds (Incident.kind inc)) in
   Set.diff provides happened |> Set.to_list
 
-let run_artifact t arti kind recipe =
+let run_artifact t arti path recipe =
   printf "started %s %s at %s\n%!"
     (Artifact.name arti)
     (Recipe.to_string recipe)
     (startup_time ());
   let checks = Artifact.checks arti in
-  let job = Bap_artifact.run_recipe t.ctxt arti kind recipe in
+  let job = Job.run t.ctxt recipe path in
   print_errors job;
   let incs = Job.incidents job in
   let missed = missed_kinds recipe incs in
@@ -189,46 +175,33 @@ let of_incidents_file t filename =
   let artifact = List.fold incidents ~init:artifact
       ~f:(fun a i -> Artifact.update a i Undecided) in
   let artifact = confirm t.confirmed artifact (Artifact.checks artifact) in
-  let t = update t (Local, artifact) in
+  let t = update t (Path.create "", artifact) in
   render t
-
-let print_recipes_and_exit ctxt =
-  let recipes = Recipe.list ctxt.tool  in
-  List.iter recipes ~f:(fun r ->
-      printf "%-32s %s\n" (Recipe.name r) (Recipe.description r));
-  exit 0
 
 let print_artifacts_and_exit () =
   let images = Docker.Image.tags Bap_artifact.image in
   List.iter images ~f:(fun tag -> printf "%s\n" tag);
   exit 0
 
-let print_bap_version ctxt =
-  match Docker.run ctxt.tool "--version" with
-  | None -> ()
-  | Some str -> printf "bap version: %s" str
-
 let main o print_recipes print_artifacts =
   let save artis = match o.store with
     | None -> ()
     | Some file -> Bap_report_io.dump file artis in
-  if print_recipes   then print_recipes_and_exit o.context;
   if print_artifacts then print_artifacts_and_exit ();
   let confirmed = read_confirmations o.confirms in
   let t = create o.context o.output confirmed in
   let t = match o.store, o.update with
     | Some file, true ->
       let artis = Bap_report_io.read file in
-      List.fold artis ~init:t ~f:(fun t a -> update t (Local,a))
+      List.fold artis ~init:t ~f:(fun t a -> update t (Path.create "",a))
     | _ -> t in
   match o.mode with
   | From_incidents incs -> of_incidents_file t incs
   | From_stored db ->
     let artis = Bap_report_io.read db in
-    let t = List.fold artis ~init:t ~f:(fun t a -> update t (Local,a)) in
+    let t = List.fold artis ~init:t ~f:(fun t a -> update t (Path.create "",a)) in
     render t
   | Run_artifacts tasks ->
-    print_bap_version o.context;
     let artis =
       List.fold tasks ~init:[]
         ~f:(fun acc (artis,_) -> acc @ artis) in
@@ -242,4 +215,6 @@ let _ =
   Term.eval (Term.(const main $options $list_recipes $list_artifacts), info)
 
 (* TODO: install view file somewhere
-   TODO: should be val Recipe.provides : t -> incident_kind list *)
+   TODO: rewise all the directories/archives creation:
+         maybe make more distiguive names or place everything in the
+         temp dir *)

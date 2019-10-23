@@ -86,7 +86,7 @@ let man = [
       $(mname) --list-artifacts";
 
   `S "Description";
-  `P "A frontend to the whole bap and docker infrastructures,
+  `P "A frontend to the whole bap and docker infrastructure,
         that hides all the complexity under the hood: no bap
         installation required, no manual pulling of docker
         images needed.";
@@ -129,12 +129,12 @@ let recipes : Recipes.t list Term.t =
   Arg.(value & opt_all Recipes.conv [] & info ["recipes"; "r"] ~doc)
 
 let confirms =
-  let doc = "file with confirmations. " in
+  let doc = "file with confirmations" in
   Arg.(value & opt (some non_dir_file) None & info ["confirmations"; "c"] ~doc)
 
-let output =
-  let doc = "file with results" in
-  Arg.(value & opt string "results.html" & info ["output"; "o"] ~doc)
+let report =
+  let doc = "file with html report" in
+  Arg.(value & opt string "results.html" & info ["report";] ~doc)
 
 let list_recipes =
   let doc = "prints the list of available recipes and exits" in
@@ -144,16 +144,22 @@ let list_artifacts =
   let doc = "prints list of available artifacts and exits" in
   Arg.(value & flag & info ["list-artifacts"] ~doc)
 
+let bap_version =
+  let doc = "print bap version that is used in a tool and exits" in
+  Arg.(value & flag & info ["bap-version"] ~doc)
+
 let of_incidents =
   let doc = "create a report from file with incidents" in
   Arg.(value & opt (some non_dir_file) None & info ["of-incidents"; "i"] ~doc)
 
-let tool,tool_info =
+let tool =
   let default = "binaryanalysisplatform/bap-toolkit:latest" in
-  let doc = "A tool used to run analysis (default is binaryanalysisplatform/bap-toolkit).
-             Tags could be fed as expected, with ':' separator" in
+  let doc = "A tool used to run analysis.
+             Tags could be fed as expected, with ':' separator.
+             A special keyword $(b,host) can be used to use host
+             bap and recipes" in
   let tool_info = Arg.info ["tool"; "t"] ~doc in
-  Arg.(value & opt string default tool_info), tool_info
+  Arg.(value & opt string default tool_info)
 
 let config =
   let doc = "Config file contains information that is useful

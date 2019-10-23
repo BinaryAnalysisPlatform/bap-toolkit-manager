@@ -1,5 +1,60 @@
 open Core_kernel
 
+(**
+
+{2 Intro }
+
+The whole purpose of the bap-toolkit is to provide an
+easy access to BAP without deep understanding how to
+build it, what configure options should be set,
+what arguments should be fed and etc. Also, bap-toolkit is
+an easy way to get a friendly report about incidents that
+happened during the analysis.
+
+As a result the whales, which bap-toolkit is standing on
+(can't promise to keep exactly three of them) are:
+- bap
+- docker image with a set of analysis
+- artifacts and recipes
+
+And the flat surface that this whales are summoned to hold
+is bap-toolkit with a fairly small set of options.
+
+
+{3 Journaling }
+
+BAP provides a tremendous number of options, and each of them
+can alter results of an analysis. And recipes were added to
+BAP universe to gain simplicity and reproducability.
+Simplicity means that one need only a single command line
+argument to get results, and reproducability
+means that one can share the recipe with someone else to
+get the same results.
+
+Bap-toolkit made one more tiny step forward to reproducability.
+BAP is alive creature that grows, becomes clever and more precise:
+e.g. from some point of time a better algorithm for CFG reconstruction
+comes on duty or a bug is fixed. Given all of that, it nearly
+impossible to get a reasonable explanation, why results from the
+same analysis can differ.
+
+To make such kind of investigations easier, Bap-tookit records as much
+of evidences of the running BAP instance as it can: time it take,
+IR program, log, errors.
+
+{3 Artifacts and incidents }
+
+Incidents are the most precious outcome of any analysis.
+And incidents can appear when a recipe(s) (analysis) is applied to
+artifact(s).
+Incidents are unique for every combination of (artifact + analysis):
+they have a history - a set of addresses, i.e. a trace that leads to
+the incident. This history is called Locations.
+Status is bound with each incident and it's our relation to the
+incident, if we believe in it or not.
+
+*)
+
 module Std : sig
 
   (** docker image  *)
@@ -19,8 +74,7 @@ module Std : sig
           Invalid_argument if name isn'y a proper docker image name. *)
       val of_string_exn : string -> t
 
-      (** [exists image] returns true if
-          the [image] exists. Returns false
+      (** [exists image] returns true if the [image] exists. Returns false
           otherwise (e.g. image exists, but image's tag is not found *)
       val exists : t -> bool
 
@@ -79,17 +133,38 @@ module Std : sig
   type incident_id   [@@deriving bin_io, compare, sexp]
   type confirmation  [@@deriving bin_io, compare, sexp]
 
+  (** Tool is layer that incapsulate bap frontend and
+      a list of recipes that it can run.
+
+      One can think of a tool as of a container with bap and recipes. *)
+  module Tool : sig
+    type t
+
+    (** [of_image im] creates tool from image.
+        return Error if the provided image doesn't contain bap frontend*)
+    val of_image : image -> t Or_error.t
+
+    (** [host ()] creates tool from the host bap installation.
+        return Error if bap not found *)
+    val host : unit -> t Or_error.t
+
+    (** [recipes tool ] returns the list of the recipes
+        that are provided by [tool]. *)
+    val recipes : t -> recipe list
+
+    (** [find_recipe tool name] finds a recipe by its name. Return None if
+        not recipe found *)
+    val find_recipe : t -> string -> recipe option
+
+    val bap_version : t -> string option
+
+    val to_string : t -> string
+
+  end
+
   module Recipe : sig
 
     type t = recipe
-
-    (** [find tool name] finds a recipe by its name. Return None if
-        not recipe found *)
-    val find : image -> string -> t option
-
-    (** [list tool ] returns the list of the recipes
-        that are provided by [tool]. *)
-    val list : image -> t list
 
     (** [name recipe] returns the name of the recipe  *)
     val name : t -> string
@@ -135,18 +210,37 @@ module Std : sig
 
   type limit = Limit.t
 
+  module Path : sig
+    type t
+
+    (** [create ?image path] create a path from
+        a string. if [image] is set then path is
+        considered relatively the image root,
+        otherwise relatively the host root *)
+    val create : ?image:image -> string -> t
+
+    (** [size t] returns the size of the file at [path]. *)
+    val size : t -> int option
+
+  end
+
+  type path = Path.t
+  type tool = Tool.t
+
   module Job : sig
 
     type t
+    type ctxt
 
-    (** [run recipe ~tool ~verbose=true ~image ~limit path ] runs the recipe.
-        [tool] is an image responsible for running the recipe.
-        if [image] is set then [path] is considered
-        relatively to the [image], else to the host filesystem.
-        returns a time that was spent to process the recipe.
+    (** [context ~verbose ~limit tool] creates a context for a
+        job in order to make it easy to repeat different jobs
+        under the same context.
 
         @param verbose saves bap BIR and asm output, true by default *)
-    val run : recipe -> tool:image -> ?verbose:bool -> ?image:image -> ?limit:limit -> string -> t
+    val context : ?verbose:bool -> ?limit:limit -> tool -> ctxt
+
+    (** [run ctxt recipe path ] runs the [recipe] for the artifact at [path]  *)
+    val run : ctxt -> recipe -> path -> t
 
     (** [time job] returns time  in seconds spent for the job [t] *)
     val time : t -> float
@@ -156,16 +250,6 @@ module Std : sig
 
     (** [errors t] returns a list of errors from the stderr *)
     val errors : t -> string list
-
-  end
-
-
-  module Size : sig
-
-    (** [get ?image path] returns the size of the file at [path].
-        if [image] is set then [path] is considered
-        relatively to the [image], else to the host filesystem*)
-    val get : ?image:image -> string -> int option
 
   end
 
@@ -295,6 +379,12 @@ module Std : sig
         along with its status, if any found *)
     val find : t -> incident_id -> (incident * status) option
 
+    (** [merge a a'] returns an artifact that posses the information
+        from both of artifacts [a] and [a'] if the following is true:
+         - [a] and [a'] refers to the same artifact
+         - there are no contradictions in the information, e.g.
+           if can't be that an incident from [a] is defined as false
+           negative and from [a'] as confirmed *)
     val merge : t -> t -> t option
 
   end
@@ -357,6 +447,8 @@ module Std : sig
       | Alias of string
     [@@deriving sexp]
 
+    (** [register kind info] adds a new information about
+        displaying incidents of [kind].  *)
     val register : incident_kind -> info -> unit
 
     (** [tab_of_incident i] return a string list
@@ -364,6 +456,8 @@ module Std : sig
     val tab_of_incident : incident -> string list
   end
 
+
+  (** Few helpers for parsing incidents, confirmations and etc. *)
   module Read : sig
 
     (** [incidents channel] read incidents from [channel]  *)

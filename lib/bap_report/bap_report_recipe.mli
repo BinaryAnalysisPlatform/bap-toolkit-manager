@@ -5,8 +5,7 @@ type t
 type image = Bap_report_docker.image
 type recipe = t
 
-val find : image -> string -> t option
-val list : image -> t list
+val create : name:string -> desc:string -> t
 
 val add_parameter : t -> name:string -> value:string -> t
 

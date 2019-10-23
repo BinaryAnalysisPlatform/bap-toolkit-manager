@@ -1,12 +1,18 @@
 open Core_kernel
+open Bap_report_docker
 open Bap_report_utils
 
-module Docker = Bap_report_docker
+type t = image option * string
 
-let get ?image path =
+let create ?image path = image, path
+
+let image = fst
+let relative = snd
+
+let size (image,path) =
   let size = match image with
     | Some image ->
-      Docker.run image (sprintf "stat -c%%s %s" path)
+      run image (sprintf "stat -c%%s %s" path)
     | None -> cmd "stat -c%%s %s" path in
   match size with
   | None -> None
