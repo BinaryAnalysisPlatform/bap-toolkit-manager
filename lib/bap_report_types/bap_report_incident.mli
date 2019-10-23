@@ -1,8 +1,10 @@
 open Core_kernel
 open Bap_report_common
 
+type kind [@@deriving bin_io, compare, sexp]
+
 module Kind : sig
-  type t [@@deriving bin_io, compare, sexp]
+  type t = kind [@@deriving bin_io, compare, sexp]
   include Identifiable.S with type t := t
 end
 
@@ -17,10 +19,8 @@ module Locations : sig
 end
 
 type locations = Locations.t [@@deriving bin_io, compare, sexp]
-type kind = Kind.t [@@deriving bin_io, compare, sexp]
 
 type t [@@deriving bin_io, compare, sexp]
-
 
 module Id : sig
 

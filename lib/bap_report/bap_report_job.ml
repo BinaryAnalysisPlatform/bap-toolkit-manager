@@ -79,6 +79,10 @@ let read_tar ?target_dir target_file tar read =
     else None
   else None
 
+let read_tar ?target_dir target_file tar read =
+  try read_tar ?target_dir target_file tar read
+  with _ -> None
+
 let read_incidents tar =
   let read f = Some (In_channel.with_file f ~f:Bap_report_read.incidents) in
   match read_tar "incidents" tar read with

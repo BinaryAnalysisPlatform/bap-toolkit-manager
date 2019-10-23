@@ -10,42 +10,31 @@ type col =
 
 type info =
   | Web of string
-  | Tab of col list
+  | Col of col
   | Alias of string
 [@@deriving sexp]
 
+let view = Hashtbl.create (module Incident.Kind)
 
-type t = info list String.Table.t
-
-let create () = Hashtbl.create (module String)
-
-let update t k info =
-  Hashtbl.update t (Incident.Kind.to_string k) ~f:(function
+let register k info =
+  Hashtbl.update view k ~f:(function
       | None -> [info]
       | Some xs -> info :: xs)
 
-let find_info t k ~f =
-  match Hashtbl.find t (Incident.Kind.to_string k) with
+let find_info k ~f =
+  match Hashtbl.find view k with
   | None -> None
   | Some infos -> List.find_map infos ~f
 
-let name t kind =
-  match find_info t kind ~f:(function
+let name kind =
+  match find_info kind ~f:(function
       | Alias a -> Some a
       | _ -> None) with
   | None -> Incident.Kind.to_string kind
   | Some a -> a
 
-let path t inc =
-  match find_info t (Incident.kind inc) ~f:(function
-      | Path p -> Some p
-      | _ -> None) with
-  | None -> []
-  | Some n ->
-    List.take (List.rev @@ Incident.path inc) n
-
-let web t inc =
-  find_info t inc ~f:(function
+let web inc =
+  find_info inc ~f:(function
       | Web w -> Some w
       | _ -> None)
 
@@ -54,79 +43,32 @@ let symbol inc =
   | [] -> None
   | a :: _ -> Some a
 
+let default_cols = [Name;Addr]
 
-let data t inc =
+let find_tab k =
+  match Hashtbl.find view k with
+  | None -> default_cols
+  | Some infos ->
+    List.rev @@
+    List.filter_map infos ~f:(function
+        | Col c -> Some c
+        | _ -> None) |> function
+    | [] -> default_cols
+    | cs -> cs
+
+let tab_of_incident inc =
   let kind = Incident.kind inc in
-  let cols = find_info t kind ~f:(function
-      | Tab cols -> Some cols
-      | _ -> None) in
-  let cols = match cols with
-    | None -> [Name; Addr]
-    | Some cols -> cols in
+  let cols = find_tab kind in
   List.rev @@
   List.fold cols ~init:[] ~f:(fun acc -> function
       | Path n ->
         (List.rev (List.take (Incident.path inc) n)) @ acc
       | Name ->
         let name = match symbol inc with
-          | None -> name t kind
+          | None -> name kind
           | Some sym -> sym in
         name :: acc
       | Addr -> Addr.to_string (Incident.addr inc) :: acc
       | Locations ->
         let addrs = Locations.addrs (Incident.locations inc) in
         List.rev_map ~f:Addr.to_string addrs @ acc)
-
-let read_sexp ch =
-  try Sexp.input_sexp ch |> Option.some
-  with _ -> None
-
-let get_alias data =
-  match data with
-  | [Sexp.Atom x] -> Some (Alias x)
-  | _ -> None
-
-let get_web data =
-  match data with
-  | [Sexp.Atom x] -> Some ( Web x)
-  | _ -> None
-
-let get_tab data =
-  try
-    Some (Tab (List.map data ~f:col_of_sexp))
-  with _ -> None
-
-let info_of_sexp s =
-  let open Sexp in
-  match s with
-  | List (Atom s :: Atom kind :: data) ->
-    let data = match s with
-      | "alias" -> get_alias data
-      | "web"   -> get_web data
-      | "tab"   -> get_tab data
-      | _ -> None in
-    Option.value_map data ~default:None ~f:(fun x -> Some (kind,x))
-  | _ -> None
-
-let info_of_str str =
-  try
-    Sexp.of_string str |> info_of_sexp
-  with _ -> None
-
-module Read = Bap_report_read.Helper
-
-let read ch =
-  let t = create () in
-  let rec loop = function
-    | [] -> ()
-    | line :: lines ->
-      let line = sprintf "(%s)" line in
-      match info_of_str line with
-      | None -> loop lines
-      | Some (kind,info) ->
-        update t (Incident.Kind.of_string kind) info;
-        loop lines in
-  loop (Read.lines ~comments:"#" ch);
-  t
-
-let of_file fname = In_channel.with_file fname ~f:read

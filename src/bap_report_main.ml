@@ -8,20 +8,15 @@ type artifact_kind =
   | Local
   | Image
 
-type render = {
-  view : View.t;
-  outp : string;
-}
-
 type t = {
   ctxt  : job_ctxt;
   artis : (artifact_kind * artifact) String.Map.t;
-  render : render;
   confirmed: confirmation Incident.Id.Map.t String.Map.t;
+  output  : string;
 }
 
-let create ctxt render confirmed =
-  { ctxt; artis = Map.empty (module String); render; confirmed }
+let create ctxt output confirmed =
+  { ctxt; artis = Map.empty (module String); output; confirmed }
 
 let update t (kind,arti) =
   {t with artis =
@@ -78,26 +73,11 @@ module Bap_artifact = struct
       Some (Image, Artifact.create ?size name)
 end
 
-module Render = struct
+let render t =
+  let doc = Template.render (artifacts t) in
+  Out_channel.with_file t.output
+    ~f:(fun ch -> Out_channel.output_string ch doc)
 
-  type t = render
-
-  let create_view = function
-    | None -> View.create ()
-    | Some f -> View.of_file f
-
-  let create view output = {
-    view = create_view view;
-    outp = output;
-  }
-
-  let run t artis =
-    let doc = Template.render t.view artis in
-    Out_channel.with_file t.outp
-      ~f:(fun ch -> Out_channel.output_string ch doc)
-end
-
-let render t = Render.run t.render (artifacts t)
 let check_equal x y = compare_incident_kind x y = 0
 
 let check_diff xs ys =
@@ -152,28 +132,37 @@ let startup_time () =
   let t = gettimeofday () |> localtime in
   sprintf "%02d:%02d:%02d" t.tm_hour t.tm_min t.tm_sec
 
-let run_artifact ctxt confirmed arti kind recipe =
+let missed_kinds recipe incidents =
+  let provides = Recipe.kinds recipe |> Set.of_list (module Incident.Kind) in
+  let happened = List.fold incidents ~init:(Set.empty (module Incident.Kind))
+      ~f:(fun kinds inc -> Set.add kinds (Incident.kind inc)) in
+  Set.diff provides happened |> Set.to_list
+
+let run_artifact t arti kind recipe =
   printf "started %s %s at %s\n%!"
     (Artifact.name arti)
     (Recipe.to_string recipe)
     (startup_time ());
   let checks = Artifact.checks arti in
-  let job = Bap_artifact.run_recipe ctxt arti kind recipe in
+  let job = Bap_artifact.run_recipe t.ctxt arti kind recipe in
   print_errors job;
-  match Job.incidents job with
-  | [] -> arti
-  | incs ->
-    let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
-    let checks = check_diff (Artifact.checks arti) checks in
-    let arti = update_time arti checks (Job.time job)  in
-    confirm confirmed arti checks
+  let incs = Job.incidents job in
+  let missed = missed_kinds recipe incs in
+  let arti = List.fold missed ~init:arti
+      ~f:(fun arti kind ->
+          let a = Artifact.no_incidents arti kind in
+          Artifact.with_time a kind (Job.time job)) in
+  let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
+  let diff = check_diff (Artifact.checks arti) checks in
+  let arti = update_time arti diff (Job.time job)  in
+  confirm t.confirmed arti diff
 
 let run t name recipes =
   match get t name with
   | None -> t
   | Some (kind,arti) ->
     List.fold ~init:(t,arti) recipes ~f:(fun (t,arti) recipe ->
-        let arti = run_artifact t.ctxt t.confirmed arti kind recipe in
+        let arti = run_artifact t arti kind recipe in
         let t = update t (kind,arti) in
         render t;
         t,arti) |> fst
@@ -226,8 +215,7 @@ let main o print_recipes print_artifacts =
   if print_recipes   then print_recipes_and_exit o.context;
   if print_artifacts then print_artifacts_and_exit ();
   let confirmed = read_confirmations o.confirms in
-  let ren = Render.create o.view o.output in
-  let t = create o.context ren confirmed in
+  let t = create o.context o.output confirmed in
   let t = match o.store, o.update with
     | Some file, true ->
       let artis = Bap_report_io.read file in
@@ -253,4 +241,5 @@ let _ =
   let open Bap_report_cmd_terms in
   Term.eval (Term.(const main $options $list_recipes $list_artifacts), info)
 
-(* TODO: install view file somewhere *)
+(* TODO: install view file somewhere
+   TODO: should be val Recipe.provides : t -> incident_kind list *)

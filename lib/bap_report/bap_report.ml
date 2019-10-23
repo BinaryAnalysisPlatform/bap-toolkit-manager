@@ -17,8 +17,6 @@ module Std = struct
   module Read = Bap_report_read
   module View = Bap_report_view
 
-  type view = View.t
-
   module Template = Bap_report_template
 
 end

@@ -15,3 +15,6 @@ val name : t -> string
 val description : t -> string
 
 val to_string : t -> string
+
+val provide : t -> incident_kind -> t
+val kinds : t -> incident_kind list

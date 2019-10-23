@@ -74,7 +74,6 @@ module Limit_arg = struct
   let conv : t Arg.conv = parser,printer
 end
 
-
 let doc = "Bap toolkit"
 
 let man = [
@@ -156,9 +155,10 @@ let tool,tool_info =
   let tool_info = Arg.info ["tool"; "t"] ~doc in
   Arg.(value & opt string default tool_info), tool_info
 
-let view =
-  let doc = "use a view file with view for rendering incidents" in
-  Arg.(value & opt (some non_dir_file) None & info ["view"; "v"] ~doc)
+let config =
+  let doc = "Config file contains information that is useful
+             for display purposes." in
+  Arg.(value & opt (some non_dir_file) None & info ["config";] ~doc)
 
 let store =
   let doc = "store results in the file" in

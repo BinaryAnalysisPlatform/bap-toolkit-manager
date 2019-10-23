@@ -2,6 +2,7 @@ open Core_kernel
 open Cmdliner
 open Bap_report.Std
 
+module Config = Bap_report_config
 module Cmd = Bap_report_cmd_terms
 
 open Bap_report_scheduled
@@ -22,7 +23,6 @@ type t = {
   context    : job_ctxt;
   confirms   : string option;
   output     : string;
-  view       : string option;
   store      : string option;
   update     : bool;
 } [@@deriving fields]
@@ -46,8 +46,16 @@ let create_recipes tool recipes =
   | None ->
     Result.all @@ List.map recipes ~f:(find_recipe tool)
 
-let create mode ctxt a b c d e =
-  Fields.create mode ctxt a b c d e
+let create_recipes config tool recipes =
+  Or_error.map (create_recipes tool recipes) ~f:(fun rs ->
+      List.map rs ~f:(Config.provide_kinds config))
+
+let read_config = function
+  | None -> Config.empty
+  | Some f -> Config.read f
+
+let create mode ctxt conf out store update =
+  Fields.create mode ctxt conf out store update
 
 let make_run = function
   | Error er ->
@@ -55,7 +63,7 @@ let make_run = function
     exit 1
   | Ok xs -> Run_artifacts xs
 
-let infer_mode ctxt of_schedule of_file of_incidents artifacts recipes =
+let infer_mode ctxt config of_schedule of_file of_incidents artifacts recipes =
   let (>>=) = Or_error.(>>=) in
   match of_schedule, of_file, of_incidents with
   | Some f,_,_ ->
@@ -65,7 +73,7 @@ let infer_mode ctxt of_schedule of_file of_incidents artifacts recipes =
         ~init:(Ok [])
         ~f:(fun acc s ->
             acc >>= fun acc ->
-            create_recipes ctxt.tool s.recipes >>= fun rs ->
+            create_recipes config ctxt.tool s.recipes >>= fun rs ->
             Ok (([s.artifact], rs) :: acc)) in
     make_run rs
   | _,Some f,_ -> From_stored f
@@ -73,7 +81,7 @@ let infer_mode ctxt of_schedule of_file of_incidents artifacts recipes =
   | _ ->
     let rs =
       Ok (List.concat artifacts) >>= fun artis ->
-      create_recipes ctxt.tool (List.concat recipes) >>= fun recipes ->
+      create_recipes config ctxt.tool (List.concat recipes) >>= fun recipes ->
       Ok [artis,recipes] in
     make_run rs
 
@@ -90,9 +98,11 @@ let context tool limits verbose =
 open Cmd
 
 let options =
+  let config = Term.(const read_config $config) in
   let ctxt = Term.(const context $tool $limits $verbose) in
   let mode = Term.(const infer_mode
                    $ctxt
+                   $config
                    $schedule
                    $of_file
                    $of_incidents
@@ -103,6 +113,5 @@ let options =
         $ctxt
         $confirms
         $output
-        $view
         $store
         $update)

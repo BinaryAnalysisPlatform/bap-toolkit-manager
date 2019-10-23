@@ -102,6 +102,14 @@ module Std : sig
     val add_parameter : t -> name:string -> value:string -> t
 
     val to_string : t -> string
+
+    (** [provide t kind] registers [t] as a provider of incidents of [kind] *)
+    val provide : t -> incident_kind -> t
+
+    (** [kinds r] returns a list of incidents kinds that
+        can be happened during the recipe run *)
+    val kinds : t -> incident_kind list
+
   end
 
   module Limit : sig
@@ -204,6 +212,8 @@ module Std : sig
     module Id : sig
       type t = incident_id  [@@deriving bin_io, compare, sexp]
       val create : incident_kind -> locations -> t
+      val locations : t -> locations
+      val kind : t -> incident_kind
       include Identifiable.S   with type t := t
     end
 
@@ -239,6 +249,10 @@ module Std : sig
     (** [update artifact incident status]
         updates the [artifact] with new data *)
     val update : t -> incident -> status -> t
+
+    (** [no_incidents t kind] states that there weren't any
+         incident of [kind] happened with artifact.  *)
+    val no_incidents : t -> incident_kind -> t
 
     (** [incidents ~check artifact] returns the list of incidents
         that were happen with [artifact] along with the status.
@@ -327,7 +341,7 @@ module Std : sig
 
   end
 
-  (** View describes a way to display the results of an analysis.  *)
+  (** View is used to display results of an analysis. *)
   module View : sig
 
     type col =
@@ -335,24 +349,20 @@ module Std : sig
       | Name
       | Addr
       | Locations
+    [@@deriving sexp]
 
     type info =
       | Web of string
-      | Tab of col list
+      | Col of col
       | Alias of string
+    [@@deriving sexp]
 
-    type t
+    val register : incident_kind -> info -> unit
 
-    val create : unit -> t
-    val update : t -> incident_kind -> info -> unit
-    val name : t -> incident_kind -> string
-    val web  : t -> incident_kind -> string option
-    val data : t -> incident -> string list
-    val of_file : string -> t
-
+    (** [tab_of_incident i] return a string list
+        of info associated with a given incident *)
+    val tab_of_incident : incident -> string list
   end
-
-  type view = View.t
 
   module Read : sig
 
@@ -382,7 +392,7 @@ module Std : sig
   module Template : sig
 
     (** [render view artifacts] retutns the html report  *)
-    val render : view -> artifact list -> string
+    val render : artifact list -> string
   end
 
 end
