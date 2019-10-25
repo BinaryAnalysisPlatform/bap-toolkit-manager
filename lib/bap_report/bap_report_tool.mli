@@ -1,6 +1,5 @@
 open Core_kernel
 open Bap_report_types
-open Bap_report_docker
 
 type t
 type recipe = Bap_report_recipe.t

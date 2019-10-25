@@ -6,7 +6,7 @@ module Scheduled = Bap_report_scheduled
 
 type t = {
   ctxt  : Job.ctxt;
-  artis : (path * artifact) String.Map.t;
+  artis : artifact String.Map.t;
   confirmed: confirmation Incident.Id.Map.t String.Map.t;
   output  : string;
 }
@@ -14,47 +14,46 @@ type t = {
 let create ctxt output confirmed =
   { ctxt; artis = Map.empty (module String); output; confirmed }
 
-let update t (kind,arti) =
+let update t arti =
   {t with artis =
-            Map.set t.artis (Artifact.name arti) (kind,arti) }
+            Map.set t.artis (Artifact.name arti) arti }
 
 let get t name = Map.find t.artis name
-let artifacts t = Map.data t.artis |> List.map ~f:snd
+let artifacts t = Map.data t.artis
 
 module Bap_artifact = struct
 
-  let image = Docker.Image.of_string_exn "binaryanalysisplatform/bap-artifacts"
+  let image = Image.of_string_exn "binaryanalysisplatform/bap-artifacts"
 
-  let with_tag tag = Docker.Image.with_tag image tag
+  let with_tag tag = Image.with_tag image tag
 
   let can't_find tag reason = eprintf "can't find %s: %s\n" tag reason
 
   let artifact_exists tag =
     let image = with_tag tag in
-    match Docker.Image.get image with
+    match Image.get image with
     | Error er ->
       can't_find tag (Error.to_string_hum er);
       false
     | Ok () ->
       let cmd = sprintf "find / -type f -name /artifact" in
-      match Docker.run image cmd with
+      match Image.run image cmd with
       | None | Some "" ->
         can't_find tag "no such file in image";
         false
       | _ -> true
 
-  let path_of_name name =
-    if Sys.file_exists name then Some (Path.create name)
+  let file_of_name name =
+    if Sys.file_exists name then Some (File.create name)
     else if artifact_exists name then
-      Some (Path.create ~image:(with_tag name) "/artifact")
+      Some (File.create ~image:(with_tag name) "/artifact")
     else None
 
   let find name =
-    match path_of_name name with
+    match file_of_name name with
     | None -> None
-    | Some path ->
-      let size = Path.size path in
-      Some (path, Artifact.create ?size name)
+    | Some file ->
+      Some (Artifact.create ~file name)
 
 end
 
@@ -124,40 +123,43 @@ let missed_kinds recipe incidents =
       ~f:(fun kinds inc -> Set.add kinds (Incident.kind inc)) in
   Set.diff provides happened |> Set.to_list
 
-let run_artifact t arti path recipe =
-  printf "started %s %s at %s\n%!"
+let run_artifact t arti recipe =
+  printf "%s: %s %s\n%!"
+    (startup_time ())
     (Artifact.name arti)
-    (Recipe.to_string recipe)
-    (startup_time ());
+    (Recipe.to_string recipe);
   let checks = Artifact.checks arti in
-  let job = Job.run t.ctxt recipe path in
-  print_errors job;
-  let incs = Job.incidents job in
-  let missed = missed_kinds recipe incs in
-  let arti = List.fold missed ~init:arti
-      ~f:(fun arti kind ->
-          let a = Artifact.no_incidents arti kind in
-          Artifact.with_time a kind (Job.time job)) in
-  let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
-  let diff = check_diff (Artifact.checks arti) checks in
-  let arti = update_time arti diff (Job.time job)  in
-  confirm t.confirmed arti diff
+  match Artifact.file arti with
+  | None -> arti
+  | Some file ->
+     let job = Job.run t.ctxt recipe file in
+     print_errors job;
+     let incs = Job.incidents job in
+     let missed = missed_kinds recipe incs in
+     let arti = List.fold missed ~init:arti
+                  ~f:(fun arti kind ->
+                    let a = Artifact.no_incidents arti kind in
+                    Artifact.with_time a kind (Job.time job)) in
+     let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
+     let diff = check_diff (Artifact.checks arti) checks in
+     let arti = update_time arti diff (Job.time job)  in
+     confirm t.confirmed arti diff
 
 let run t name recipes =
   match get t name with
   | None -> t
-  | Some (kind,arti) ->
+  | Some arti ->
     List.fold ~init:(t,arti) recipes ~f:(fun (t,arti) recipe ->
-        let arti = run_artifact t arti kind recipe in
-        let t = update t (kind,arti) in
+        let arti = run_artifact t arti recipe in
+        let t = update t arti in
         render t;
         t,arti) |> fst
 
-let run_artifacts t tasks  =
+let run_artifacts t tasks =
   List.fold tasks ~init:t
     ~f:(fun t (names, recipes) ->
-        List.fold ~init:t names
-          ~f:(fun t name -> run t name recipes))
+      List.fold ~init:t names
+        ~f:(fun t name -> run t name recipes))
 
 let create_artifacts t artis =
   List.fold artis
@@ -175,11 +177,11 @@ let of_incidents_file t filename =
   let artifact = List.fold incidents ~init:artifact
       ~f:(fun a i -> Artifact.update a i Undecided) in
   let artifact = confirm t.confirmed artifact (Artifact.checks artifact) in
-  let t = update t (Path.create "", artifact) in
+  let t = update t artifact in
   render t
 
 let print_artifacts_and_exit () =
-  let images = Docker.Image.tags Bap_artifact.image in
+  let images = Image.tags Bap_artifact.image in
   List.iter images ~f:(fun tag -> printf "%s\n" tag);
   exit 0
 
@@ -193,16 +195,16 @@ let main o print_recipes print_artifacts =
   let t = match o.store, o.update with
     | Some file, true ->
       let artis = Bap_report_io.read file in
-      List.fold artis ~init:t ~f:(fun t a -> update t (Path.create "",a))
+      List.fold artis ~init:t ~f:(fun t a -> update t a)
     | _ -> t in
   match o.mode with
   | From_incidents incs -> of_incidents_file t incs
   | From_stored db ->
     let artis = Bap_report_io.read db in
-    let t = List.fold artis ~init:t ~f:(fun t a -> update t (Path.create "",a)) in
+    let t = List.fold artis ~init:t ~f:(fun t a -> update t a) in
     render t
   | Run_artifacts tasks ->
-    let artis =
+     let artis =
       List.fold tasks ~init:[]
         ~f:(fun acc (artis,_) -> acc @ artis) in
     let t = create_artifacts t artis in

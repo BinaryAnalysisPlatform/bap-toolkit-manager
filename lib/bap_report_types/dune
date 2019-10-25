@@ -1,4 +1,6 @@
 (library
    (name bap_report_types)
-   (libraries core_kernel)
+   (libraries
+           core_kernel
+           bap_report_utils)
    (preprocess (pps ppx_jane)))

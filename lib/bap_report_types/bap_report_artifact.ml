@@ -4,17 +4,19 @@ open Bap_report_common
 module Incident = Bap_report_incident
 module Kind = Incident.Kind
 module Id = Incident.Id
-
+module File = Bap_report_file
 
 type incident = Incident.t [@@deriving bin_io, compare, sexp]
 type incident_kind = Bap_report_incident.kind  [@@deriving bin_io, compare, sexp]
 type incident_id = Bap_report_incident.id  [@@deriving bin_io, compare, sexp]
+type file = File.t [@@deriving bin_io, compare, sexp]
 
 type t = {
-  name : string;
-  size : int option;
-  data : (incident * status) Id.Map.t Kind.Map.t;
-  time : float Kind.Map.t;
+    name : string;
+    file : file option;
+    size : int option;
+    data : (incident * status) Id.Map.t Kind.Map.t;
+    time : float Kind.Map.t;
 } [@@deriving bin_io, compare, sexp]
 
 module Size = struct
@@ -41,9 +43,11 @@ module Time = struct
 end
 
 
-let create ?size name  = {
-  name; size; data = Kind.Map.empty; time = Kind.Map.empty;
-}
+let create ?file name  =
+  let size = Option.value_map ~default:None file ~f:(fun f -> File.size f) in
+  {
+    name; file; size; data = Kind.Map.empty; time = Kind.Map.empty;
+  }
 
 let name t = t.name
 let size t = t.size
@@ -81,6 +85,8 @@ let with_size t size = {t with size=Some size}
 let with_time t kind time = {t with time = Map.set t.time ~key:kind ~data:time}
 
 let time t kind = Map.find t.time kind
+
+let file t = t.file
 
 let time_hum t kind =
   match time t kind with
@@ -122,6 +128,12 @@ let merge_name a a' =
   if String.(a.name <> a'.name) then None
   else Some a.name
 
+let merge_file a a' =
+  match a.file, a'.file with
+  | Some f, Some f' when File.equal f f' -> `Ok (Some f)
+  | None, None -> `Ok None
+  | _ -> `Diff
+
 let merge_size a a' =
   match a.size, a'.size with
   | Some s, Some s' when Int.(s = s') -> Some s
@@ -154,7 +166,10 @@ let merge a a' =
   match merge_name a a' with
   | None -> None
   | Some name ->
+     match merge_file a a' with
+     | `Diff -> None
+     | `Ok file ->
     let size = merge_size a a' in
     let time = merge_time a a' in
     let data = merge_data a a' in
-    Some {name; size; time; data}
+    Some {name; file; size; time; data}

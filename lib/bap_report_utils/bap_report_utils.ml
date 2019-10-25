@@ -14,8 +14,3 @@ let cmd fmt =
       eprintf "command '%s' failed: %s\n" c (Exn.to_string e);
       None in
   ksprintf run fmt
-
-let split_string s =
-  String.split_on_chars ~on:[' '; '\t'] s |>
-  List.filter ~f:(fun s -> s <> "") |>
-  List.map ~f:String.strip

@@ -1,0 +1,3 @@
+(library
+   (name bap_report_utils)
+   (libraries core_kernel))

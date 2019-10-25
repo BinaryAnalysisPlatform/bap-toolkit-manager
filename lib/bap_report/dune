@@ -1,9 +1,10 @@
 (library
-   (name bap_report)
+(name bap_report)
    (libraries
       core_kernel
       monads
       zip
+      bap_report_read
       bap_report_types
-      bap_report_read)
+      bap_report_utils)
    (preprocess (pps ppx_jane)))

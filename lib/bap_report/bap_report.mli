@@ -60,7 +60,6 @@ module Std : sig
   (** docker image  *)
   type image
 
-  module Docker : sig
     module Image : sig
 
       type t = image
@@ -96,7 +95,6 @@ module Std : sig
       (** [name im] return name of the image [im] *)
       val name : t -> string
 
-    end
 
     (** [run ~entry ~mount image cmd] runs [cmd] with the docker [image].
 
@@ -107,7 +105,7 @@ module Std : sig
     val run : ?entry:string ->
       ?mount:string * string -> image -> string -> string option
 
-  end
+    end
 
   type recipe
   type artifact [@@deriving bin_io, compare, sexp]
@@ -210,7 +208,7 @@ module Std : sig
 
   type limit = Limit.t
 
-  module Path : sig
+  module File : sig
     type t
 
     (** [create ?image path] create a path from
@@ -224,7 +222,7 @@ module Std : sig
 
   end
 
-  type path = Path.t
+  type file = File.t
   type tool = Tool.t
 
   module Job : sig
@@ -240,7 +238,7 @@ module Std : sig
     val context : ?verbose:bool -> ?limit:limit -> tool -> ctxt
 
     (** [run ctxt recipe path ] runs the [recipe] for the artifact at [path]  *)
-    val run : ctxt -> recipe -> path -> t
+    val run : ctxt -> recipe -> file -> t
 
     (** [time job] returns time  in seconds spent for the job [t] *)
     val time : t -> float
@@ -327,8 +325,8 @@ module Std : sig
 
     type t = artifact [@@deriving bin_io, compare, sexp]
 
-    (** [create ~size name] creates a new artifact. *)
-    val create : ?size:int -> string -> t
+    (** [create ~file name] creates a new artifact. *)
+    val create : ?file:file -> string -> t
 
     (** [update artifact incident status]
         updates the [artifact] with new data *)
@@ -349,6 +347,9 @@ module Std : sig
 
     (** [name artifact] returns a name of the [artifact] *)
     val name   : t -> string
+
+    (** [file artifact] returns a file that is corresponded to the [artifact]  *)
+    val file   : t -> file option
 
     (** [size artifact] return a size (in bytes) of the [artifact]*)
     val size   : t -> int option

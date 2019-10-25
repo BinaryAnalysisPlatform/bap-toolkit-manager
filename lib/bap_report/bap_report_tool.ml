@@ -2,17 +2,16 @@ open Core_kernel
 open Bap_report_types
 open Bap_report_utils
 
-module Docker = Bap_report_docker
 module Recipe = Bap_report_recipe
 
 type recipe = Bap_report_recipe.t
 
 type t =
-  | Image of Docker.image
+  | Image of image
   | Host
 
 let bap_version = function
-  | Image im -> Docker.run im "--version"
+  | Image im -> Image.run im "--version"
   | Host -> cmd "bap --version"
 
 let check t =
@@ -46,7 +45,7 @@ let recipes_of_string s =
 let recipes tool =
   let str = match tool with
     | Host -> cmd "bap --list-recipes"
-    | Image im -> Docker.run im "--list-recipes" in
+    | Image im -> Image.run im "--list-recipes" in
   match str with
   | None | Some "" -> []
   | Some s -> recipes_of_string s
@@ -61,4 +60,4 @@ let image = function
 
 let to_string  = function
   | Host -> "host"
-  | Image im -> Docker.Image.to_string im
+  | Image im -> Image.to_string im

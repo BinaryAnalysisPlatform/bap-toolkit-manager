@@ -3,14 +3,7 @@ open Bap_report_utils
 open Bap_report_types
 
 module Filename = Caml.Filename
-module Docker = Bap_report_docker
 
-type image = Bap_report_docker.image
-
-let split_string s =
-  String.split_on_chars ~on:[' '; '\t'] s |>
-  List.filter ~f:(fun s -> s <> "") |>
-  List.map ~f:String.strip
 
 let split_on_first s ~on =
   let indexes = List.filter_map on ~f:(String.index s) in
@@ -44,7 +37,7 @@ let list tool =
       let desc = String.strip desc in
       Some {name;desc;args=[];kinds=[]}
     | _ -> None in
-  match Docker.run tool "--list-recipes" with
+  match Image.run tool "--list-recipes" with
   | None | Some "" -> []
   | Some r ->
     let rs = String.split ~on:'\n' r in

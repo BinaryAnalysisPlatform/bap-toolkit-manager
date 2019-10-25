@@ -2,7 +2,6 @@ open Core_kernel
 open Bap_report_types
 
 type t
-type image = Bap_report_docker.image
 type recipe = t
 
 val create : name:string -> desc:string -> t

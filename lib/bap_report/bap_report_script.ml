@@ -1,16 +1,18 @@
 open Core_kernel
 open Bap_report_types
-open Bap_report_env
 open Bap_report_utils
 open Bap_report_read
 
 module Recipe = Bap_report_recipe
 module Limit  = Bap_report_limit
-module Env    = Bap_report_env
 
 type recipe = Recipe.t
 type limit  = Limit.t
 type journal = string
+
+let mytime = "mytime"
+let stdout = "bap.stdout"
+let stderr = "bap.stderr"
 
 module Journal = struct
   type t = journal
@@ -64,7 +66,7 @@ module Journal = struct
     | Some log -> Log.errors log
 
   let time tar =
-    match read_tar Env.mytime tar Time.of_file with
+    match read_tar mytime tar Time.of_file with
     | None -> None
     | Some tm -> Time.elapsed tm
 
@@ -86,13 +88,17 @@ type insn =
   | Write of journal
   | RunIt of run
 
+
+
 let string_of_run {path; recipe; watch; verbose} =
   String.concat ~sep:" " [
     if watch then sprintf "/usr/bin/time -v -o %s" mytime else "";
     "bap";
     path;
     sprintf "--recipe=%s" (Recipe.to_string recipe);
-    if verbose then "-d -dasm" else "";
+    if verbose
+    then
+      "-dbir:out.bir --print-bir-attr=address -dasm:out.asm -dogre:out.ogre -dknowledge:out.knowledge" else "";
     sprintf "> %s 2> %s" stdout stderr;
   ]
 

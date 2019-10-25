@@ -69,12 +69,24 @@ let create tool print_recipes print_bap_version mode ctxt conf out store update 
   print_and_exit tool print_recipes print_bap_version;
   Fields.create mode ctxt conf out store update
 
+let check_if_nothing_to_do xs =
+  let notify_and_exit what =
+    eprintf "the %s list is empty, nothing to do!\n" what;
+    exit 1 in
+  let names = List.map xs ~f:fst in
+  let recipes = List.map xs ~f:snd in
+  if List.for_all names ~f:List.is_empty then
+    notify_and_exit "artifacts";
+  if List.for_all recipes ~f:List.is_empty then
+    notify_and_exit "recipes"
+
 let make_run tool = function
   | Error er ->
     eprintf "%s\n" @@ Error.to_string_hum er;
     exit 1
-  | Ok [] -> exit 0
-  | Ok xs -> Run_artifacts xs
+  | Ok xs ->
+     check_if_nothing_to_do xs;
+     Run_artifacts xs
 
 let infer_mode tool config of_schedule of_file of_incidents artifacts recipes =
   let (>>=) = Or_error.(>>=) in
@@ -102,7 +114,7 @@ let tool_of_string s =
   let tool = match s with
     | "host" -> Tool.host ()
     | s ->
-       Or_error.(Docker.Image.of_string s >>= Tool.of_image) in
+       Or_error.(Image.of_string s >>= Tool.of_image) in
   match tool with
   | Ok t -> t
   | Error er ->
