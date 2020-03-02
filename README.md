@@ -20,7 +20,7 @@ to collect, analyze, and render the results in the HTML format.
 Also, don't forget to grant an access to the docker engine for the current user,
 if you didn't do it before:
 ```
-:~$ sudo usermod -a -G docker $USER
+sudo usermod -a -G docker $USER
 ```
 and re-login after that
 
@@ -31,12 +31,12 @@ the installation easier.
 But now one can do the following:
 
 ```
-:~$ opam switch create 4.07.1
-:~$ eval `opam config env`
-:~$ opam install core_kernel.v0.11.1 monads cmdliner
-:~$ git clone https://github.com/BinaryAnalysisPlatform/bap-toolkit-manager
-:~$ cd bap-toolkit
-:~$ make && make install
+opam switch create 4.07.1
+eval `opam config env`
+opam install core_kernel.v0.11.1 monads cmdliner
+git clone https://github.com/BinaryAnalysisPlatform/bap-toolkit-manager
+cd bap-toolkit
+make && make install
 ```
 
 ## Usage
@@ -211,8 +211,8 @@ to have at least the next:
      desktop machine).
      The next sequence of commands
      ```
-     :~$ bap-toolkit --store=my.results -a /bin/echo -r av-rule-174
-     :~$ bap-toolkit --update=my.results -a /bin/ls -r jpl-rule-14
-     :~$ bap-toolkit --from=my.results
+     bap-toolkit --store=my.results -a /bin/echo -r av-rule-174
+     bap-toolkit --update=my.results -a /bin/ls -r jpl-rule-14
+     bap-toolkit --from=my.results
      ```
      will produce an html report for two artifacts: /bin/echo and /bin/ls.
