@@ -1,14 +1,15 @@
 
 # Overview
 
-`bap-toolkit` provides an easy way to run `bap` against variety of artifacts and analysis.
-Underneath of the hood `bap-toolkit` is an extra layer for docker containers, so there is no
-need to install `bap` manually or to know what arguments feed to the docker (host installation
-is also supported though).
+BAP toolkit manager provides an easy way to run bap on a variety of artifacts and analyses.
+Underneath of the hood, `bap-toolkit-manager` works on (docker) containers, so there is no
+need to install `bap` manually or to learn which command-line arguments are need to start
+the container. For testing and development purposes the uncontainerized (host) installation
+is also supported.
 
-`bap-toolkit` provides a friendly way to observe the results of the analysis.
-Thus, if the analysis produce an incidents file, then an html report will be stored
-in the `results.html` file.
+BAP Toolkit Manager provides a friendly user inteface for inspecting the results of running 
+BAP Toolkit on a group of test artifacts. It is currently relies on the BAP incident library,
+to collect, analyze, and render the results in the HTML format. 
 
 ## Build and install
 
