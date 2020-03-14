@@ -1,14 +1,15 @@
 
 # Overview
 
-`bap-toolkit` provides an easy way to run `bap` against variety of artifacts and analysis.
-Underneath of the hood `bap-toolkit` is an extra layer for docker containers, so there is no
-need to install `bap` manually or to know what arguments feed to the docker (host installation
-is also supported though).
+BAP toolkit manager provides an easy way to run bap on a variety of artifacts and analyses.
+Underneath of the hood, `bap-toolkit-manager` works on (docker) containers, so there is no
+need to install `bap` manually or to learn which command-line arguments are need to start
+the container. For testing and development purposes the uncontainerized (host) installation
+is also supported.
 
-`bap-toolkit` provides a friendly way to observe the results of the analysis.
-Thus, if the analysis produce an incidents file, then an html report will be stored
-in the `results.html` file.
+BAP Toolkit Manager provides a friendly user inteface for inspecting the results of running
+BAP Toolkit on a group of test artifacts. It is currently relies on the BAP incident library,
+to collect, analyze, and render the results in the HTML format.
 
 ## Build and install
 
@@ -19,7 +20,7 @@ in the `results.html` file.
 Also, don't forget to grant an access to the docker engine for the current user,
 if you didn't do it before:
 ```
-:~$ sudo usermod -a -G docker $USER
+sudo usermod -a -G docker $USER
 ```
 and re-login after that
 
@@ -30,12 +31,12 @@ the installation easier.
 But now one can do the following:
 
 ```
-:~$ opam switch create 4.07.1
-:~$ eval `opam config env`
-:~$ opam install core_kernel.v0.12.0 monads cmdliner
-:~$ git clone https://github.com/BinaryAnalysisPlatform/bap-toolkit-manager
-:~$ cd bap-toolkit-manager
-:~$ make && make install
+opam switch create 4.07.1
+eval `opam config env`
+opam install core_kernel.v0.12.0 monads cmdliner
+git clone https://github.com/BinaryAnalysisPlatform/bap-toolkit-manager
+cd bap-toolkit-manager
+make && make install
 ```
 
 ## Usage
@@ -210,8 +211,8 @@ to have at least the next:
      desktop machine).
      The next sequence of commands
      ```
-     :~$ bap-toolkit --store=my.results -a /bin/echo -r av-rule-174
-     :~$ bap-toolkit --update=my.results -a /bin/ls -r jpl-rule-14
-     :~$ bap-toolkit --from=my.results
+     bap-toolkit --store=my.results -a /bin/echo -r av-rule-174
+     bap-toolkit --update=my.results -a /bin/ls -r jpl-rule-14
+     bap-toolkit --from=my.results
      ```
      will produce an html report for two artifacts: /bin/echo and /bin/ls.
