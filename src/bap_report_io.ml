@@ -1,6 +1,8 @@
 open Core_kernel
 open Bap_report.Std
 
+module Filename = Caml.Filename
+
 module IO = struct
   open Bin_prot
 

@@ -32,9 +32,9 @@ But now one can do the following:
 ```
 :~$ opam switch create 4.07.1
 :~$ eval `opam config env`
-:~$ opam install core_kernel.v0.11.1 monads cmdliner
+:~$ opam install core_kernel.v0.12.0 monads cmdliner
 :~$ git clone https://github.com/BinaryAnalysisPlatform/bap-toolkit-manager
-:~$ cd bap-toolkit
+:~$ cd bap-toolkit-manager
 :~$ make && make install
 ```
 

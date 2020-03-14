@@ -9,6 +9,8 @@ module Journal = Script.Journal
 module Limit   = Bap_report_limit
 module Tool    = Bap_report_tool
 
+module Filename = Caml.Filename
+
 type tool = Bap_report_tool.t
 type recipe = Bap_report_recipe.t
 type limit = Bap_report_limit.t
@@ -58,9 +60,9 @@ let context ?(verbose=true) ?(limit=Limit.empty) tool = {verbose; limit; tool}
 let apply tool entry =
   match Tool.image tool with
   | Some im ->
-     ignore @@
-       Image.run im ~mount:(pwd (), drive)
-         ~entry:(sprintf "%s/%s" drive @@ Filename.basename entry) ""
+    ignore @@
+    Image.run im ~mount:(pwd (), drive)
+      ~entry:(sprintf "%s/%s" drive @@ Filename.basename entry) ""
   | None -> ignore @@ cmd "sh %s" entry
 
 let run {verbose; tool; limit} recipe file =

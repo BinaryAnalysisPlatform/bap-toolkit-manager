@@ -6,6 +6,9 @@ open Bap_report_read
 module Recipe = Bap_report_recipe
 module Limit  = Bap_report_limit
 
+module Filename = Caml.Filename
+
+
 type recipe = Recipe.t
 type limit  = Limit.t
 type journal = string

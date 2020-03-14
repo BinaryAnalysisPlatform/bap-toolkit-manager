@@ -33,19 +33,21 @@ let split_on_first s ~on =
 
 let recipes_of_string s =
   let recipe_of_string s =
+    let s = String.strip s in
     match split_on_first ~on:[' '; '\t'] s with
+    | "Use" :: _ -> None
     | name :: desc :: _ ->
-       let name = String.strip name in
-       let desc = String.strip desc in
-       Some (Recipe.create ~name ~desc)
+      let name = String.strip name in
+      let desc = String.strip desc in
+      Some (Recipe.create ~name ~desc)
     | _ -> None in
   let rs = String.split ~on:'\n' s in
   List.filter_map rs ~f:recipe_of_string
 
 let recipes tool =
   let str = match tool with
-    | Host -> cmd "bap --list-recipes"
-    | Image im -> Image.run im "--list-recipes" in
+    | Host -> cmd "bap list recipes"
+    | Image im -> Image.run im "list recipes" in
   match str with
   | None | Some "" -> []
   | Some s -> recipes_of_string s

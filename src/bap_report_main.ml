@@ -4,6 +4,8 @@ open Bap_report_options
 
 module Scheduled = Bap_report_scheduled
 
+module Filename = Caml.Filename
+
 type t = {
   ctxt  : Job.ctxt;
   artis : artifact String.Map.t;
@@ -132,18 +134,18 @@ let run_artifact t arti recipe =
   match Artifact.file arti with
   | None -> arti
   | Some file ->
-     let job = Job.run t.ctxt recipe file in
-     print_errors job;
-     let incs = Job.incidents job in
-     let missed = missed_kinds recipe incs in
-     let arti = List.fold missed ~init:arti
-                  ~f:(fun arti kind ->
-                    let a = Artifact.no_incidents arti kind in
-                    Artifact.with_time a kind (Job.time job)) in
-     let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
-     let diff = check_diff (Artifact.checks arti) checks in
-     let arti = update_time arti diff (Job.time job)  in
-     confirm t.confirmed arti diff
+    let job = Job.run t.ctxt recipe file in
+    print_errors job;
+    let incs = Job.incidents job in
+    let missed = missed_kinds recipe incs in
+    let arti = List.fold missed ~init:arti
+        ~f:(fun arti kind ->
+            let a = Artifact.no_incidents arti kind in
+            Artifact.with_time a kind (Job.time job)) in
+    let arti = List.fold incs ~init:arti ~f:(fun a i -> Artifact.update a i Undecided) in
+    let diff = check_diff (Artifact.checks arti) checks in
+    let arti = update_time arti diff (Job.time job)  in
+    confirm t.confirmed arti diff
 
 let run t name recipes =
   match get t name with
@@ -158,8 +160,8 @@ let run t name recipes =
 let run_artifacts t tasks =
   List.fold tasks ~init:t
     ~f:(fun t (names, recipes) ->
-      List.fold ~init:t names
-        ~f:(fun t name -> run t name recipes))
+        List.fold ~init:t names
+          ~f:(fun t name -> run t name recipes))
 
 let create_artifacts t artis =
   List.fold artis
@@ -204,7 +206,7 @@ let main o print_recipes print_artifacts =
     let t = List.fold artis ~init:t ~f:(fun t a -> update t a) in
     render t
   | Run_artifacts tasks ->
-     let artis =
+    let artis =
       List.fold tasks ~init:[]
         ~f:(fun acc (artis,_) -> acc @ artis) in
     let t = create_artifacts t artis in

@@ -37,7 +37,7 @@ let list tool =
       let desc = String.strip desc in
       Some {name;desc;args=[];kinds=[]}
     | _ -> None in
-  match Image.run tool "--list-recipes" with
+  match Image.run tool "list recipes" with
   | None | Some "" -> []
   | Some r ->
     let rs = String.split ~on:'\n' r in
