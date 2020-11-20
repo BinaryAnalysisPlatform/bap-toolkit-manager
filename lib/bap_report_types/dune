@@ -3,4 +3,4 @@
    (libraries
            core_kernel
            bap_report_utils)
-   (preprocess (pps ppx_jane)))
+   (preprocess (pps ppx_bap)))

@@ -17,7 +17,7 @@ let message_of_string line =
     Some (source,data)
   | _ -> None
 
-let is_bap_error str = str = "bap.error"
+let is_bap_error str = String.(str = "bap.error")
 
 let predicates = [is_bap_error, Bap_error]
 
@@ -51,6 +51,5 @@ let of_file log =
   else None
 
 let errors t =
-  List.fold t ~init:[] ~f:(fun acc (x,data) ->
-      if x = Bap_error then data::acc
-      else acc) |> List.rev |> List.concat
+  List.fold t ~init:[] ~f:(fun acc (Bap_error,data) ->
+      data::acc) |> List.rev |> List.concat

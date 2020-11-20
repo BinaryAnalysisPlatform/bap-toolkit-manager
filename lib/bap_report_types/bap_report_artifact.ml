@@ -12,11 +12,11 @@ type incident_id = Bap_report_incident.id  [@@deriving bin_io, compare, sexp]
 type file = File.t [@@deriving bin_io, compare, sexp]
 
 type t = {
-    name : string;
-    file : file option;
-    size : int option;
-    data : (incident * status) Id.Map.t Kind.Map.t;
-    time : float Kind.Map.t;
+  name : string;
+  file : file option;
+  size : int option;
+  data : (incident * status) Id.Map.t Kind.Map.t;
+  time : float Kind.Map.t;
 } [@@deriving bin_io, compare, sexp]
 
 module Size = struct
@@ -69,7 +69,7 @@ let update t incident status =
          | Some res ->
            Map.update res id ~f:(function
                | None -> incident,status
-               | Some (inc,status') when status' = Undecided -> inc,status
+               | Some (inc,Undecided) -> inc,status
                | Some x -> x))}
 
 let no_incidents t kind =
@@ -166,10 +166,10 @@ let merge a a' =
   match merge_name a a' with
   | None -> None
   | Some name ->
-     match merge_file a a' with
-     | `Diff -> None
-     | `Ok file ->
-    let size = merge_size a a' in
-    let time = merge_time a a' in
-    let data = merge_data a a' in
-    Some {name; file; size; time; data}
+    match merge_file a a' with
+    | `Diff -> None
+    | `Ok file ->
+      let size = merge_size a a' in
+      let time = merge_time a a' in
+      let data = merge_data a a' in
+      Some {name; file; size; time; data}

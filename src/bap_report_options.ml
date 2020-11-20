@@ -35,7 +35,7 @@ let find_recipe tool r =
 let all_recipes tool = Tool.recipes tool
 
 let create_recipes tool recipes =
-  match List.find recipes ~f:(fun r -> Cmd.requested_name r = "all") with
+  match List.find recipes ~f:(fun r -> String.(Cmd.requested_name r = "all")) with
   | Some _ -> Ok (all_recipes tool)
   | None ->
     Result.all @@ List.map recipes ~f:(find_recipe tool)
@@ -57,8 +57,8 @@ let print_recipes_and_exit tool =
 let print_bap_version_and_exit tool =
   match Tool.bap_version tool with
   | None ->
-     eprintf "bap not found in %s\n" (Tool.to_string tool);
-     exit 1
+    eprintf "bap not found in %s\n" (Tool.to_string tool);
+    exit 1
   | Some str -> printf "bap version: %s" str; exit 0
 
 let print_and_exit tool recipes version =
@@ -85,8 +85,8 @@ let make_run tool = function
     eprintf "%s\n" @@ Error.to_string_hum er;
     exit 1
   | Ok xs ->
-     check_if_nothing_to_do xs;
-     Run_artifacts xs
+    check_if_nothing_to_do xs;
+    Run_artifacts xs
 
 let infer_mode tool config of_schedule of_file of_incidents artifacts recipes =
   let (>>=) = Or_error.(>>=) in
@@ -114,16 +114,16 @@ let tool_of_string s =
   let tool = match s with
     | "host" -> Tool.host ()
     | s ->
-       Or_error.(Image.of_string s >>= Tool.of_image) in
+      Or_error.(Image.of_string s >>= Tool.of_image) in
   match tool with
   | Ok t -> t
   | Error er ->
-     eprintf "can't find or create tool %s: %s" s (Error.to_string_hum er);
-     exit 1
+    eprintf "can't find or create tool %s: %s" s (Error.to_string_hum er);
+    exit 1
 
 let context tool limits verbose =
   let limit = List.fold limits
-                ~init:Limit.empty ~f:(fun l (n,q) -> Limit.add l n q) in
+      ~init:Limit.empty ~f:(fun l (n,q) -> Limit.add l n q) in
   Job.context ~verbose ~limit tool
 
 open Cmd
@@ -134,10 +134,10 @@ let options =
   let config = const read_config $config in
   let ctxt = const context $tool $limits $verbose in
   let mode = const infer_mode
-                   $tool $config $schedule
-                   $of_file $of_incidents
-                   $artifacts $recipes in
+             $tool $config $schedule
+             $of_file $of_incidents
+             $artifacts $recipes in
   const create
-        $tool $list_recipes $bap_version
-        $mode $ctxt $confirms $report
-        $store $update
+  $tool $list_recipes $bap_version
+  $mode $ctxt $confirms $report
+  $store $update

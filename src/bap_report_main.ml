@@ -115,7 +115,7 @@ let print_errors job =
   List.iter (Job.errors job) ~f:(eprintf "%s\n")
 
 let startup_time () =
-  let open Unix in
+  let open Caml_unix in
   let t = gettimeofday () |> localtime in
   sprintf "%02d:%02d:%02d" t.tm_hour t.tm_min t.tm_sec
 

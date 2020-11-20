@@ -4,7 +4,7 @@ open Bap_report_common
 type kind =
   | Must
   | May
-[@@deriving sexp,compare,bin_io]
+[@@deriving sexp,compare,bin_io, equal]
 
 type locs = Bap_report_incident.locations [@@deriving sexp,compare,bin_io]
 
@@ -31,4 +31,4 @@ let validate {conf} status =
   | Must, None -> False_neg
   | Must, Some _ -> Confirmed
 
-let is {conf} conf' = conf' = conf
+let is {conf} = equal_kind conf

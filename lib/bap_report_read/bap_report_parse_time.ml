@@ -122,7 +122,7 @@ let system_time t =
 let cpu_percentage t =
   Option.(
     Map.find t Cpu >>= fun str ->
-    String.filter str ~f:(fun c -> c <> '%') |> String.strip |>
+    String.filter str ~f:(fun c -> Char.(c <> '%')) |> String.strip |>
     int_of_string)
 
 let elapsed t =

@@ -80,7 +80,8 @@ module Entry = struct
         sprintf "<pre>%s</pre>" data
       else data in
     let data =
-      if List.exists style ~f:(fun x -> x = Style.Spaced_data) then
+      if List.exists style ~f:(function Style.Spaced_data -> true
+                                      | _ -> false) then
         sprintf "&nbsp%s&nbsp" data
       else data in
     let style = Style.to_string style in
@@ -349,7 +350,7 @@ let render_check artifact kind =
   let time = Artifact.time_hum artifact kind in
   match Artifact.incidents ~kind artifact with
   | [] ->
-     String.concat [
+    String.concat [
       render_checkname name kind;
       render_time time;
       no_incidents;

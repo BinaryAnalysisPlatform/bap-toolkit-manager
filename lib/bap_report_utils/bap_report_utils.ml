@@ -1,4 +1,5 @@
 open Core_kernel
+module Unix = Caml_unix
 
 exception Command_failed of Unix.process_status
 

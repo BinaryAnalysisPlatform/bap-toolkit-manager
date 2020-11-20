@@ -7,4 +7,4 @@
       bap_report_read
       bap_report_types
       bap_report_utils)
-   (preprocess (pps ppx_jane)))
+   (preprocess (pps ppx_bap)))

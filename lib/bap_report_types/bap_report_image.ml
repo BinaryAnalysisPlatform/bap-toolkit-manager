@@ -6,8 +6,8 @@ type t = string * string option
 
 let split_string s =
   String.split_on_chars ~on:[' '; '\t'] s |>
-    List.filter ~f:(fun s -> s <> "") |>
-    List.map ~f:String.strip
+  List.filter ~f:(fun s -> String.(s <> "")) |>
+  List.map ~f:String.strip
 
 module type A = sig
   val tags : string -> string list
@@ -20,14 +20,14 @@ module Net_available = struct
     match cmd "wget -q https://registry.hub.docker.com/v1/repositories/%s/tags -O -" image with
     | None -> []
     | Some s ->
-      let s = String.filter s ~f:(fun c -> c <> '"') in
+      let s = String.filter s ~f:(fun c -> Char.(c <> '"')) in
       let s = String.tr s ~target:'}' ~replacement:' ' in
       let s = String.split ~on:' ' s in
       fst @@
       List.fold s ~init:([],false)
         ~f:(fun (acc,remember) w ->
             if remember then w :: acc, false
-            else if w = "name:" then acc,true
+            else if String.(w = "name:") then acc,true
             else acc,false)
 
   let image name =
@@ -107,12 +107,12 @@ let pull image =
 let get image =
   if exists_locally image then Ok ()
   else
-    if exists_globaly image then
-      let () = pull image in
-      if exists_locally image then Ok ()
-      else
-        Or_error.errorf "can't pull image %s" (to_string image)
-    else Or_error.errorf "can't detect image %s" (to_string image)
+  if exists_globaly image then
+    let () = pull image in
+    if exists_locally image then Ok ()
+    else
+      Or_error.errorf "can't pull image %s" (to_string image)
+  else Or_error.errorf "can't detect image %s" (to_string image)
 
 let check name  =
   match String.split name ~on:':' with

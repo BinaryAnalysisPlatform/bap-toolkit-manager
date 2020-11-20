@@ -76,7 +76,7 @@ module Make(M : Monad.S) = struct
     machine >>~ fun m ->
     let calls,stack =
       match m.stack, m.prev_pc with
-      | (pc,_) :: _,_ when pc = m.pc ->
+      | (pc,_) :: _,_ when Poly.(pc = m.pc) ->
         (* to prevent adding lisp calls on the stack  *)
         state.calls, m.stack
       | stack, Some prev_pc ->
@@ -99,9 +99,9 @@ module Make(M : Monad.S) = struct
     machine >>~ fun m ->
     let stack,calls =
       match m.stack with
-      | (pc,name') :: stack' when name = name' ->
+      | (pc,name') :: stack' when String.(name = name') ->
         let calls =
-          if m.pc = pc then
+          if Poly.(m.pc = pc) then
             (*  for lisp calls, want be sure it is in calls:
                 i.e. there wasn't pc-change event between
                 call  and call-return, therefore the
@@ -193,7 +193,7 @@ module Make(M : Monad.S) = struct
   let event = function
     | Switch (a,b) -> switch (a,b)
     | Fork   (a,b) -> fork (a,b)
-    | Call name | Call_return name when name = unresolved -> return ()
+    | Call name | Call_return name when String.(name = unresolved) -> return ()
     | Call name -> call name
     | Call_return name -> call_return name
     | Incident_location (id,addrs) -> incident_location (id,addrs)
